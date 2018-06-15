@@ -1,5 +1,5 @@
 <?xml version='1.0'?>
-<sdf version='1.4'>
+<sdf version='1.5'>
   <model name="megabloks1x2">
     <static>true</static> <!--for now, will remove when we need to learn controls for this-->
     <link name="brick">
