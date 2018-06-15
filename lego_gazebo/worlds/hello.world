@@ -7,24 +7,39 @@
     <include>
       <uri>model://sun</uri>
     </include>
-    <model name="other_mesh">
-      <pose>0 0 2  0 0 0</pose>
+    <include>
+      <uri>model://cafe_table</uri>
+      <pose>0 0 0  0 0 0</pose>
+    </include>
+    <model name="1x1_mesh">
+      <pose>-0.15 0 1.5  0 0 0</pose>
       <static>true</static>
       <link name="body">
         <visual name="visual">
           <geometry>
-            <mesh><uri>file://megabloks1x1.stl</uri></mesh>
+            <mesh><uri>file://megabloks1x1.dae</uri></mesh>
           </geometry>
         </visual>
       </link>
     </model>
-    <model name="my_mesh">
-      <pose>0 0 1  0 0 0</pose>
+    <model name="1x2_mesh">
+      <pose>0 0 1.5  0 0 0</pose>
       <static>true</static>
       <link name="body">
         <visual name="visual">
           <geometry>
-            <mesh><uri>file://model.dae</uri></mesh>
+            <mesh><uri>file://megabloks1x2.dae</uri></mesh>
+          </geometry>
+        </visual>
+      </link>
+    </model>
+    <model name="1x3_mesh">
+      <pose>0.15 0 1.5  0 0 0</pose>
+      <static>true</static>
+      <link name="body">
+        <visual name="visual">
+          <geometry>
+            <mesh><uri>file://megabloks1x3.dae</uri></mesh>
           </geometry>
         </visual>
       </link>
