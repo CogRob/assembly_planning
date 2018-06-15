@@ -20,7 +20,7 @@
       <uri>model://megabloks1x2</uri>
     </include>
     <include>
-      <pose>0.15 0 1  0 0 0</pose>
+      <pose>-0.15 0 1  0 0 0</pose>
       <uri>model://megabloks1x3</uri>
     </include>
   </world>
