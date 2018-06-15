@@ -11,42 +11,17 @@
       <uri>model://cafe_table</uri>
       <pose>0 0 0  0 0 0</pose>
     </include>
-    <model name="1x1_mesh">
-      <pose>-0.15 0 1.5  0 0 0</pose>
-      <static>true</static>
-      <link name="body">
-        <visual name="visual">
-          <geometry>
-            <mesh><uri>file://megabloks1x1.dae</uri></mesh>
-          </geometry>
-        </visual>
-      </link>
-    </model>
-    <model name="1x2_mesh">
-      <pose>0 0 1.5  0 0 0</pose>
-      <static>true</static>
-      <link name="body">
-        <visual name="visual">
-          <geometry>
-            <mesh><uri>file://megabloks1x2.dae</uri></mesh>
-          </geometry>
-        </visual>
-      </link>
-    </model>
-    <model name="1x3_mesh">
-      <pose>0.15 0 1.5  0 0 0</pose>
-      <static>true</static>
-      <link name="body">
-        <visual name="visual">
-          <geometry>
-            <mesh><uri>file://megabloks1x3.dae</uri></mesh>
-          </geometry>
-        </visual>
-      </link>
-    </model>
-    <!--include>
-      <pose>0 0 5  0 0 0</pose>
+    <include>
+      <pose>00.15 0 1  0 0 0</pose>
       <uri>model://megabloks1x1</uri>
-    </include-->
+    </include>
+    <include>
+      <pose>0 0 1  0 0 0</pose>
+      <uri>model://megabloks1x2</uri>
+    </include>
+    <include>
+      <pose>0.15 0 1  0 0 0</pose>
+      <uri>model://megabloks1x3</uri>
+    </include>
   </world>
 </sdf>
