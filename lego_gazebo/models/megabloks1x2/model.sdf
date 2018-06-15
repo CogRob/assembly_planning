@@ -1,5 +1,5 @@
 <?xml version='1.0'?>
-<sdf version='1.6'>
+<sdf version='1.4'>
   <model name="megabloks1x2">
     <static>true</static> <!--for now, will remove when we need to learn controls for this-->
     <link name="brick">
@@ -7,14 +7,14 @@
       <collision name="collision">
         <geometry>
           <mesh>
-            <uri>file://meshes/megabloks1x2.stl</uri>
+            <uri>file://meshes/megabloks1x2.dae</uri>
           </mesh>
         </geometry>
       </collision>
       <visual name="visual">
         <geometry>
           <mesh>
-            <uri>file://meshes/megabloks1x2.stl</uri>
+            <uri>file://meshes/megabloks1x2.dae</uri>
           </mesh>
         </geometry>
       </visual>
