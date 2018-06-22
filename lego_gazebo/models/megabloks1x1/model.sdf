@@ -7,14 +7,14 @@
       <collision name="collision">
         <geometry>
           <mesh>
-            <uri>model://megabloks1x1/meshes/megabloks1x1.dae</uri>
+            <uri>model://megabloks1x1/meshes/model.dae</uri>
           </mesh>
         </geometry>
       </collision>
       <visual name="visual">
         <geometry>
           <mesh>
-            <uri>model://megabloks1x1/meshes/megabloks1x1_green.dae</uri>
+            <uri>model://megabloks1x1/meshes/model.dae</uri>
           </mesh>
         </geometry>
       </visual>
