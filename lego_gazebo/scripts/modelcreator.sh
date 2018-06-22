@@ -15,14 +15,21 @@ function main_loop(){
       for color in red blue green pink yellow
         do
           MNAME=${MTEMP}${num}_${color}
-          mkdir -p $MNAME/meshes
           cd $MNAME
-          create_config ${num} ${color}
           create_sdf ${num} ${color}
           cd ..
       done
   done
 
+}
+
+function create_models(){
+  MNAME=${MTEMP}${num}_${color}
+  mkdir -p $MNAME/meshes
+  cd $MNAME
+  create_config ${num} ${color}
+  create_sdf ${num} ${color}
+  cd ..
 }
 
 
@@ -61,7 +68,7 @@ function create_sdf(){
   <model name=\"megabloks1x$1_$2\">
     <static>true</static> <!--for now, will remove when we need to learn controls for this-->
     <link name=\"brick\">
-      <pose>0 0 0.1  0 0 0</pose>
+      <pose>0 0 0.005  0 0 0</pose>
       <collision name=\"collision\">
         <geometry>
           <mesh>
