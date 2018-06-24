@@ -6,7 +6,7 @@ Problems:
 - [x] mega bloks models are in a different scale, need to convert to meters
 - [ ] models are static, add inertia etc for physics
 - [x] Make separate models for all colors
-- [ ] Create blender dae's for all colors
+- [x] Create blender dae's for all colors
 
 ## Mega blok models
 
