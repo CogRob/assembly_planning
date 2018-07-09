@@ -64,7 +64,7 @@ function create_config(){
 
 function create_sdf(){
   echo "<?xml version='1.0'?>
-<sdf version='1.5'>
+<sdf version='1.4'> <!-- changed from 1.5 to be compatible with Gazebo2 -->
   <model name=\"megabloks1x$1_$2\">
     <static>true</static> <!--for now, will remove when we need to learn controls for this-->
     <link name=\"brick\">

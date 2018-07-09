@@ -288,7 +288,7 @@
               <color sid="ambient">0 0 0 1</color>
             </ambient>
             <diffuse>
-              <color sid="diffuse">0.64 0 0.02254336 1</color>
+              <color sid="diffuse">0.64 0 0.22254336 1</color>
             </diffuse>
             <specular>
               <color sid="specular">0.5 0.5 0.5 1</color>
