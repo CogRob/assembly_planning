@@ -18,6 +18,8 @@ from geometry_msgs.msg import Pose, PoseArray, Point, Quaternion
 
 from image_geometry import PinholeCameraModel
 
+from visualization_msgs.msg import Marker, MarkerArray
+
 from cv_bridge import CvBridge
 import baxter_interface
 
@@ -29,31 +31,39 @@ SIM  = True
 if(REAL):
     BLU_LOW_HUE     = 105
     BLU_HIGH_HUE    = 120
-    BLU_LOW_SAT     = 105
-    BLU_HIGH_SAT    = 120
-    BLU_LOW_VAL     = 105
-    BLU_HIGH_VAL    = 120
+    BLU_LOW_SAT     = 0
+    BLU_HIGH_SAT    = 255
+    BLU_LOW_VAL     = 0
+    BLU_HIGH_VAL    = 100
 
-    GRN_LOW_HUE     = 30
+    GRN_LOW_HUE     = 70
     GRN_HIGH_HUE    = 80
-    GRN_LOW_SAT     = 200
+    GRN_LOW_SAT     = 0
     GRN_HIGH_SAT    = 255
-    GRN_LOW_VAL     = 200
-    GRN_HIGH_VAL    = 255
+    GRN_LOW_VAL     = 0
+    GRN_HIGH_VAL    = 100
+
+
+    TEAL_LOW_HUE     = 80
+    TEAL_HIGH_HUE    = 105
+    TEAL_LOW_SAT     = 0
+    TEAL_HIGH_SAT    = 255
+    TEAL_LOW_VAL     = 0
+    TEAL_HIGH_VAL    = 100
 
     RED_LOW_HUE     = 0
-    RED_HIGH_HUE    = 10
+    RED_HIGH_HUE    = 15
     RED_LOW_SAT     = 0
     RED_HIGH_SAT    = 255
     RED_LOW_VAL     = 0
-    RED_HIGH_VAL    = 255
+    RED_HIGH_VAL    = 100
 
-    YEL_LOW_HUE     = 10
-    YEL_HIGH_HUE    = 30
-    YEL_LOW_SAT     = 68
-    YEL_HIGH_SAT    = 147
-    YEL_LOW_VAL     = 30
-    YEL_HIGH_VAL    = 200
+    YEL_LOW_HUE     = 14
+    YEL_HIGH_HUE    = 24
+    YEL_LOW_SAT     = 0
+    YEL_HIGH_SAT    = 255
+    YEL_LOW_VAL     = 0
+    YEL_HIGH_VAL    = 255
 
 if(SIM):
     BLU_LOW_HUE     = 90
@@ -65,69 +75,113 @@ if(SIM):
 
     GRN_LOW_HUE     = 30
     GRN_HIGH_HUE    = 80
-    GRN_LOW_SAT     = 200
+    GRN_LOW_SAT     = 0
     GRN_HIGH_SAT    = 255
-    GRN_LOW_VAL     = 200
+    GRN_LOW_VAL     = 0
     GRN_HIGH_VAL    = 255
+    
+    TEAL_LOW_HUE     = 80
+    TEAL_HIGH_HUE    = 105
+    TEAL_LOW_SAT     = 0
+    TEAL_HIGH_SAT    = 255
+    TEAL_LOW_VAL     = 0
+    TEAL_HIGH_VAL    = 100
 
-    RED_LOW_HUE     = 0
-    RED_HIGH_HUE    = 1
-    RED_LOW_SAT     = 235
+    RED_LOW_HUE_1     = 0
+    RED_HIGH_HUE_1    = 10
+    RED_LOW_HUE_2     = 175
+    RED_HIGH_HUE_2    = 180
+    RED_LOW_SAT     = 100
     RED_HIGH_SAT    = 255
-    RED_LOW_VAL     = 0
+    RED_LOW_VAL     = 140
     RED_HIGH_VAL    = 255
 
-    YEL_LOW_HUE     = 10
+    YEL_LOW_HUE     = 1
     YEL_HIGH_HUE    = 30
-    YEL_LOW_SAT     = 68
-    YEL_HIGH_SAT    = 147
-    YEL_LOW_VAL     = 30
-    YEL_HIGH_VAL    = 200
+    YEL_LOW_SAT     = 180
+    YEL_HIGH_SAT    = 255
+    YEL_LOW_VAL     = 0
+    YEL_HIGH_VAL    = 255
+
+
 
 colors = {
-#        "red":      {   "low_h": RED_LOW_HUE,   "high_h": RED_HIGH_HUE,
-#                        "low_s": RED_LOW_SAT,   "high_s": RED_HIGH_SAT,
-#                        "low_v": RED_LOW_VAL,   "high_v": RED_HIGH_VAL  },
-#        "yellow":   {   "low_h": YEL_LOW_HUE,   "high_h": YEL_HIGH_HUE,
-#                        "low_s": YEL_LOW_SAT,   "high_s": YEL_HIGH_SAT,
-#                        "low_v": YEL_LOW_VAL,   "high_v": YEL_HIGH_VAL  },
-#        "green":    {   "low_h": GRN_LOW_HUE,   "high_h": GRN_HIGH_HUE,
-#                        "low_s": GRN_LOW_SAT,   "high_s": GRN_HIGH_SAT,
-#                        "low_v": GRN_LOW_VAL,   "high_v": GRN_HIGH_VAL  },
+        "red":      {   "low_h": [RED_LOW_HUE_1, RED_LOW_HUE_2],   "high_h": [RED_HIGH_HUE_1, RED_HIGH_HUE_2],
+                        "low_s": RED_LOW_SAT,   "high_s": RED_HIGH_SAT,
+                        "low_v": RED_LOW_VAL,   "high_v": RED_HIGH_VAL  },
+        "yellow":   {   "low_h": YEL_LOW_HUE,   "high_h": YEL_HIGH_HUE,
+                        "low_s": YEL_LOW_SAT,   "high_s": YEL_HIGH_SAT,
+                        "low_v": YEL_LOW_VAL,   "high_v": YEL_HIGH_VAL  },
+        "green":    {   "low_h": GRN_LOW_HUE,   "high_h": GRN_HIGH_HUE,
+                        "low_s": GRN_LOW_SAT,   "high_s": GRN_HIGH_SAT,
+                        "low_v": GRN_LOW_VAL,   "high_v": GRN_HIGH_VAL  },
         "blue":     {   "low_h": BLU_LOW_HUE,   "high_h": BLU_HIGH_HUE,
-                       "low_s": BLU_LOW_SAT,   "high_s": BLU_HIGH_SAT,
-                       "low_v": BLU_LOW_VAL,   "high_v": BLU_HIGH_VAL  }
+                        "low_s": BLU_LOW_SAT,   "high_s": BLU_HIGH_SAT,
+                        "low_v": BLU_LOW_VAL,   "high_v": BLU_HIGH_VAL  },
+        "teal":     {   "low_h": TEAL_LOW_HUE,  "high_h": TEAL_HIGH_HUE,
+                        "low_s": TEAL_LOW_SAT,  "high_s": TEAL_HIGH_SAT,
+                        "low_v": TEAL_LOW_VAL,  "high_v": TEAL_HIGH_VAL  }
+}
+
+color_vals = {
+    "red":    (0, 0, 255),
+    "green":  (0, 255, 0),
+    "blue":   (255, 0, 0),
+    "yellow": (0, 255, 255),
+    "teal":   (255, 60, 0)
 }
 
 class BlockFinder():
     def __init__(self, limb):
         self.limb = limb
         self.block_poses = []
+        self.markers = MarkerArray()
         self.tf_listener = tf.TransformListener()
         self.camera_model = None
         self.min_ir_depth = 0.1
-        self.object_height = 0.05
-        self.seg_img = None
+        self.object_height = 0.1
         self.bridge = CvBridge()
         self.ir_reading = None
-        
-        self.pub_rate = rospy.Rate(10)
-        
+
+        self.pub_rate = rospy.Rate(1)
+        self.seg_img = {
+            "red": np.zeros((800,800,3), dtype=np.uint8),
+            "yellow": np.zeros((800,800,3), dtype=np.uint8),
+            "green": np.zeros((800,800,3), dtype=np.uint8),
+            "blue": np.zeros((800,800,3), dtype=np.uint8),
+            }
+        self.rect_seg_img = np.zeros((800,800,3), dtype=np.uint8)
+
+        self.ray_marker = None
+        self.pixel_loc = None
+
     def publish(self):
-        self.pose_pub    = rospy.Publisher("block_finder/" + self.limb + "/block_poses", PoseArray, queue_size=10)
-        self.seg_img_pub = rospy.Publisher("block_finder/" + self.limb + "/segmented_image", Image, queue_size=10)
+        self.pose_pub           = rospy.Publisher("block_finder/" + self.limb + "/block_poses", PoseArray, queue_size=1)
+        #self.block_xy_pub             = rospy.Publisher("block_finder/" + self.limb + "/block_xy", Point, queue_size=1)
+        self.red_seg_img_pub    = rospy.Publisher("block_finder/" + self.limb + "/red_segmented_image", Image, queue_size=1)
+        self.yellow_seg_img_pub = rospy.Publisher("block_finder/" + self.limb + "/yellow_segmented_image", Image, queue_size=1)
+        self.blue_seg_img_pub   = rospy.Publisher("block_finder/" + self.limb + "/blue_segmented_image", Image, queue_size=1)
+        self.green_seg_img_pub  = rospy.Publisher("block_finder/" + self.limb + "/green_segmented_image", Image, queue_size=1)
+        self.rect_seg_img_pub   = rospy.Publisher("block_finder/" + self.limb + "/rect_segmented_image", Image, queue_size=1)
+        self.marker_pub         = rospy.Publisher("block_finder/" + self.limb + "/block_markers", MarkerArray, queue_size=1)
+        self.ray_marker_pub     = rospy.Publisher("block_finder/image_ray", Marker, queue_size=1)
 
     def subscribe(self):
         self.cam_sub    = rospy.Subscriber("/cameras/" + self.limb + "_camera/image", Image, self.cam_callback)
         self.info_sub   = rospy.Subscriber("/cameras/" + self.limb + "_camera/camera_info", CameraInfo, self.info_callback)
         self.ir_sub     = rospy.Subscriber("/robot/range/" + self.limb + "_range/state", Range, self.ir_callback)
-
    
+
+
     '''
     Thresholds camera image and stores object centroid location (x,y) in Baxter's base frame.
     '''
     def cam_callback(self, data):
+        
         cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
+
+        block_pose_list = []
+        marker_list = MarkerArray()
 
         #find_hsv_values(cv_image)
 
@@ -140,114 +194,177 @@ class BlockFinder():
         images = [hsv, hsv, hsv, hsv, hsv]
         i = 0
 
-        for key in colors:
-            low_h = colors[key]["low_h"]
-            high_h = colors[key]["high_h"]
-            low_s = colors[key]["low_s"]
-            high_s = colors[key]["high_s"]
-            low_v = colors[key]["low_v"]
-            high_v = colors[key]["high_v"]
+
+        for color in colors:
+            low_h = colors[color]["low_h"]
+            high_h = colors[color]["high_h"]
+            low_s = colors[color]["low_s"]
+            high_s = colors[color]["high_s"]
+            low_v = colors[color]["low_v"]
+            high_v = colors[color]["high_v"]
 
             #Converting image to HSV format
-            curr_image = cv2.inRange(hsv, np.array([low_h, low_s, low_v]), np.array([high_h, high_s, high_v]))
+            if color == "red":
+                hsv_mask_1 = cv2.inRange(hsv, np.array([low_h[0], low_s, low_v]), np.array([high_h[0], high_s, high_v]))
+                hsv_mask_2 = cv2.inRange(hsv, np.array([low_h[1], low_s, low_v]), np.array([high_h[1], high_s, high_v]))
+
+                hsv_mask = hsv_mask_1 | hsv_mask_2
+
+                # Apply mask to original image
+
+            else:
+                hsv_mask = cv2.inRange(hsv, np.array([low_h, low_s, low_v]), np.array([high_h, high_s, high_v]))
+
+            masked_img = cv2.bitwise_and(cv_image, cv_image, mask=hsv_mask)
+            self.seg_img[color] = masked_img.copy()
+            cv2.imshow(color, masked_img)
 
             #Morphological opening (remove small objects from the foreground)
-            curr_image = cv2.erode(curr_image, np.ones((5,5), np.uint8), iterations=1)
-            curr_image = cv2.dilate(curr_image, np.ones((5,5), np.uint8), iterations=1)
+            erode_1 = cv2.erode(hsv_mask, np.ones((5,5), np.uint8), iterations=1)
+            dilate_1 = cv2.dilate(erode_1, np.ones((5,5), np.uint8), iterations=1)
 
             #Morphological closing (fill small holes in the foreground)
-            curr_image = cv2.dilate(curr_image, np.ones((5,5), np.uint8), iterations=1)
-            curr_image = cv2.erode(curr_image, np.ones((5,5), np.uint8), iterations=1)
+            dilate_2 = cv2.dilate(dilate_1, np.ones((10,10), np.uint8), iterations=1)
+            erode_2 = cv2.erode(dilate_2, np.ones((10,10), np.uint8), iterations=1)
 
-            images[i] = curr_image.copy()
+            images[i] = erode_2.copy()
             
-            ret, thresh = cv2.threshold(curr_image,157,255,0)
+            ret, thresh = cv2.threshold(erode_2,157,255,0)
 
             contours, hierarchy = cv2.findContours(thresh,cv2.RETR_TREE,cv2.CHAIN_APPROX_NONE)
 
-
             #Draw the countours.
             #cv2.drawContours(cv_image, contours, -1, (0,255,0), 3)
-            for c in contours:
-                rect = cv2.minAreaRect(c)
-                box = cv2.cv.BoxPoints(rect)
-                box = np.int0(box)
-                cv2.drawContours(cv_image, [box], 0, (0, 0, 255), 2)
+            large_contours = []
 
-                angle = calc_center_angle(c, cv_image)
+            
+            for c in contours:
+                area = cv2.contourArea(c)
+                if(area > 1000):
+                    large_contours.append(c)
+                    
+                    rospy.loginfo("AREA: %f", area)
+                    rect = cv2.minAreaRect(c)
+                    box = cv2.cv.BoxPoints(rect)
+                    box = np.int0(box)
+                    cv2.drawContours(cv_image, [box], 0, color_vals[color] , 2)
+
+                
+
+                #angle = calc_center_angle(c, cv_image)
 
                 #cv2.rectangle(cv_image, (x, y), (x+w, y+h), (0, 255, 0), 2)
 
-            self.seg_img = cv_image.copy()
 
             numobj = len(contours) # number of objects found in current frame
-            rospy.loginfo("There are %d objects", numobj)
-            
             if numobj > 0:
-                moms = cv2.moments(contours[0])
-                #print(moms)
-                if moms['m00']>500:
-                    cx = int(moms['m10']/moms['m00'])
-                    cy = int(moms['m01']/moms['m00'])
+                for contour in large_contours:
+                    moms = cv2.moments(contour)
 
-                    print 'cx = ', cx
-                    print 'cy = ', cy
+                    if moms['m00']>500:
+                        cx = int(moms['m10']/moms['m00'])
+                        cy = int(moms['m01']/moms['m00'])
 
-                    # Shift to center of image
-                    #cx = cx - self.camera_model.cx()
-                    #cy = cy - self.camera_model.cy()
+                        print 'cx = ', cx
+                        print 'cy = ', cy
 
-                    print "Found ", numobj,  " ", key, "object(s)"
-                    obj_found = True
+                        #cx = cx - self.camera_model.cx()
+                        #cy = cy - self.camera_model.cy()
 
-                    cam_info = rospy.wait_for_message("/cameras/"+ self.limb + "_camera" + "/camera_info", CameraInfo, timeout=None)
-                    
-                    vec = np.array(self.camera_model.projectPixelTo3dRay((cx, cy)))
-                    if(self.ir_reading != None):
-                        rospy.loginfo("IR reading is valid!")
-                        d = (self.ir_reading - self.object_height)
+                        cv2.circle(cv_image,(cx,cy), 10, color_vals[color], 1)
 
-                        print("Distance to object: ", d)
-                        d_cam = d * vec
-
-                        homog_d_cam = np.concatenate((d_cam, np.ones(1))).reshape((4,1))
-
-                        # Wait for transformation from base to head_camera
-                        self.tf_listener.waitForTransform('/world', self.limb + "_camera", rospy.Time(), rospy.Duration(4))
-                        (trans, rot) = self.tf_listener.lookupTransform('/world', self.limb + "_camera", rospy.Time())
-
-                        camera_to_base = tf.transformations.compose_matrix(translate=trans, angles=tf.transformations.euler_from_quaternion(rot))
-
-                        block_position_arr = np.dot(camera_to_base, homog_d_cam)
+                        self.pixel_loc = [cx, cy]
                         
-                        block_position_p = Point()
-                        block_position_p.x = block_position_arr[0]
-                        block_position_p.y = block_position_arr[1]
-                        block_position_p.z = block_position_arr[2]
-                        
-                        
-                        # TODO: Need to calculate this somehow still
-                        block_orientation = Quaternion()
-                        block_orientation.w = 0
-                        block_orientation.x = 0
-                        block_orientation.y = 0
-                        block_orientation.z = 0
 
-                        rospy.loginfo("Adding new block pose!")
-                        self.block_poses.append(Pose(position=block_position_p, orientation=block_orientation))
 
+                        rospy.loginfo("Found %d %s objects", numobj, color)
+                        obj_found = True
+
+                        cam_info = rospy.wait_for_message("/cameras/"+ self.limb + "_camera" + "/camera_info", CameraInfo, timeout=None)
+
+                        
+                        vec = np.array(self.camera_model.projectPixelTo3dRay((cx, cy)))
+
+                        if(self.ir_reading != None):
+                            #rospy.loginfo("IR reading is: %f", self.ir_reading)
+                            d = self.ir_reading# - self.object_height / 2
+
+                            ray_pt_1 = 0 * vec
+                            ray_pt_2 = 2 * vec
+
+
+                            #d = (self.ir_reading - self.object_height)
+                            norm_vec = np.array([0, 0, 1])
+
+                            rospy.loginfo("Vec: %f, %f, %f", vec[0], vec[1], vec[2])
+                            rospy.loginfo("Norm Vec: %f, %f, %f", norm_vec[0], norm_vec[1], norm_vec[2])
+
+                            d_proj = d * np.dot(norm_vec, vec) / (np.linalg.norm(norm_vec) * np.linalg.norm(vec))
+
+
+                            rospy.loginfo("Distance to object: %f", d)
+                            rospy.loginfo("Projected distance to object: %f", d_proj)
+                            
+                            d_cam = d * vec
+                            #d_cam = vec
+
+                            homog_d_cam = np.concatenate((d_cam, np.ones(1))).reshape((4,1))
+                            homog_ray_pt_1 = np.concatenate((ray_pt_1, np.ones(1))).reshape((4,1))
+                            homog_ray_pt_2 = np.concatenate((ray_pt_2, np.ones(1))).reshape((4,1))
+
+                            # Wait for transformation from base to head_camera
+                            self.tf_listener.waitForTransform('/base', self.limb + "_camera", rospy.Time(), rospy.Duration(4))
+                            (trans, rot) = self.tf_listener.lookupTransform('/base', self.limb + "_camera", rospy.Time())
+
+                            camera_to_base = tf.transformations.compose_matrix(translate=trans, angles=tf.transformations.euler_from_quaternion(rot))
+
+                            block_position_arr = np.dot(camera_to_base, homog_d_cam)
+
+                            
+                            # Transform ray to base frame
+                            ray_pt_1_tf = np.dot(camera_to_base, homog_ray_pt_1)
+                            ray_pt_2_tf = np.dot(camera_to_base, homog_ray_pt_2)
+
+                        
+
+                            self.ray_marker = create_ray_marker(
+                                                frame="base", 
+                                                id="object_ray",
+                                                point1=Point(ray_pt_1_tf[0], ray_pt_1_tf[1], ray_pt_1_tf[2]),
+                                                point2=Point(ray_pt_2_tf[0], ray_pt_2_tf[1], ray_pt_2_tf[2]),
+                                                ray_color="red"
+                                              )
+                            
+                            rospy.loginfo("Block position: %f, %f, %f", block_position_arr[0], block_position_arr[1], block_position_arr[2])
+                           
+                            block_position_p = Point()
+                            block_position_arr_copy = block_position_arr.copy()
+                            block_position_p.x = block_position_arr_copy[0]
+                            block_position_p.y = block_position_arr_copy[1]
+                            block_position_p.z = -.14
+
+                            # TODO: Need to calculate this later
+                            block_orientation = Quaternion()
+                            block_orientation.w = 1.0
+                            block_orientation.x = 0
+                            block_orientation.y = 0
+                            block_orientation.z = 0
+                        
+                            curr_marker = create_block_marker(frame = "base", id = len(marker_list.markers), position = block_position_p, orientation=block_orientation, block_type = "1x1", block_color = color, transparency = 1)
+                          
+
+                            rospy.loginfo("Adding new marker and block pose!")
+                            marker_list.markers.append(curr_marker)
+                            block_pose_list.append(Pose(position=block_position_p, orientation=block_orientation))
+
+                        else:
+                            rospy.loginfo("No ir_data has been recieved yet!")
                     else:
-                        rospy.loginfo("No ir_data has been recieved yet!")
-        """
-        i = 0
-        for key in colors:
-            cv2.imshow("Original", cv_image)
-            cv2.imshow(key, images[i])
-
-            cv2.waitKey()
-
-            i += 1
-        """
+                        rospy.loginfo("Moments aren't large enough!")
+        
+        self.rect_seg_img = cv_image.copy()
+        self.block_poses = block_pose_list        
+        self.markers = marker_list
 
     def info_callback(self, data):
         self.camera_model = PinholeCameraModel()
@@ -256,7 +373,7 @@ class BlockFinder():
 
     def ir_callback(self, data):
         self.ir_reading = data.range
-        #print("IR reading: ", self.ir_reading)
+        #rospy.loginfo("IR reading: %f", self.ir_reading)
         if(self.ir_reading > 60):
             #rospy.loginfo("Invalid IR reading")
             self.ir_reading = 0.4
@@ -294,25 +411,157 @@ def calc_center_angle(cont, cv_image):
 
     angle = math.atan2(longest_line[1] - longest_line[3], longest_line[0] - longest_line[2])
 
+    rospy.loginfo("Angle: %f", angle * 180 / math.pi)
 
-    print("ANGLE: ", angle * 180 / math.pi)
+
+def create_block_marker(frame, id, position, orientation, block_type, block_color, transparency):
+    curr_marker = Marker()
+    curr_marker.header.frame_id = frame
+    
+    curr_marker.type = 1 # sphere
+    curr_marker.action = 0
+    curr_marker.id = id
+    curr_marker.frame_locked = True
+    curr_marker.pose.position = position
+    curr_marker.pose.orientation = orientation
+    if(block_type == "1x1"):
+        curr_marker.scale.x = .03
+        curr_marker.scale.y = .03
+        curr_marker.scale.z = .03
+    elif(block_type == "1x2"):
+        curr_marker.scale.x = .03
+        curr_marker.scale.y = .06
+        curr_marker.scale.z = .03
+    elif(block_type == "1x3"):
+        curr_marker.scale.x = .03
+        curr_marker.scale.y = .09
+        curr_marker.scale.z = .03
+    else:
+        rospy.logerror("%s is not a supported block type. The only supported block types are 2x1, 1x2, and 1x3", block_type)
+
+
+    if(block_color == "red"):
+        curr_marker.color.r = 1.0
+        curr_marker.color.g = 0.0
+        curr_marker.color.b = 0.0
+    elif(block_color == "blue"):
+        curr_marker.color.r = 0.0
+        curr_marker.color.g = 0.0
+        curr_marker.color.b = 1.0
+    elif(block_color == "green"):
+        curr_marker.color.r = 0.0
+        curr_marker.color.g = 1.0
+        curr_marker.color.b = 0.0
+    elif(block_color == "yellow"):
+        curr_marker.color.r = 1.0
+        curr_marker.color.g = 1.0
+        curr_marker.color.b = 0.0
+    elif(block_color == "teal"):
+        curr_marker.color.r = 0.0
+        curr_marker.color.g = 0.2
+        curr_marker.color.b = 1.0
+    else:
+        rospy.logerr("Color %s doesn't have a supported marker yet! you should add one.", color)
+    
+    # Alpha value (transparency)
+    curr_marker.color.a = transparency
+
+    curr_marker.lifetime = rospy.Duration(0)
+
+    return curr_marker
+
+
+def create_ray_marker(frame, id, point1, point2, ray_color="red"):
+    curr_marker = Marker()
+    curr_marker.header.frame_id = frame
+    
+    curr_marker.type = 5 # line list
+    curr_marker.action = 0
+    curr_marker.id = 27
+    curr_marker.frame_locked = True
+    #curr_marker.pose.position = position
+    #curr_marker.pose.orientation = orientation
+
+    if(ray_color == "red"):
+        curr_marker.color.r = 1.0
+        curr_marker.color.g = 0.0
+        curr_marker.color.b = 0.0
+    elif(ray_color == "blue"):
+        curr_marker.color.r = 0.0
+        curr_marker.color.g = 0.0
+        curr_marker.color.b = 1.0
+    elif(ray_color == "green"):
+        curr_marker.color.r = 0.0
+        curr_marker.color.g = 1.0
+        curr_marker.color.b = 0.0
+    elif(ray_color == "yellow"):
+        curr_marker.color.r = 1.0
+        curr_marker.color.g = 1.0
+        curr_marker.color.b = 0.0
+    elif(ray_color == "teal"):
+        curr_marker.color.r = 0.0
+        curr_marker.color.g = 0.2
+        curr_marker.color.b = 1.0
+    else:
+        rospy.logerr("Color %s doesn't have a supported marker yet! you should add one.", color)
+    curr_marker.scale.x = .01
+
+    points_list = []
+    #point1 = Point(x = 0, y = 0, z = 0)
+    #point1 = Point(x = 0, y = 1, z = 0)
+
+    position = Point(x = 0, y = 0, z = 0)
+    orientation = Quaternion(w = 0, x = 0, y = 0, z = 0)
+
+    curr_marker.pose.position = position
+    curr_marker.pose.orientation = orientation
+
+
+    points_list.append(point1)
+    points_list.append(point2)
+    curr_marker.points = points_list
+    
+    # Alpha value (transparency)
+    curr_marker.color.a = 1
+
+    curr_marker.lifetime = rospy.Duration(0)
+
+    return curr_marker
+
 
 def main():
     rospy.init_node('block_finder')
 
-    block_finder = BlockFinder("left_hand")
+    block_finder = BlockFinder("right_hand")
     block_finder.subscribe()
     block_finder.publish()
 
-
     while not rospy.is_shutdown():
         print(block_finder.block_poses)
+
         if(len(block_finder.block_poses) > 0):
-            print("Publishing block location")
+            rospy.loginfo("Publishing block location and pixel location")
             pose_msg = PoseArray()
             pose_msg.poses = block_finder.block_poses
             block_finder.pose_pub.publish(pose_msg)
-            block_finder.seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img, "bgr8"))
+            block_finder.marker_pub.publish(block_finder.markers)
+            rospy.loginfo("There are %d markers", len(block_finder.markers.markers))
+
+            # Publish the camera x,y coordinate location of the block
+            #block_finder.block_xy_pub.publish(block_finder.pixel_loc)
+
+            # Publish ray that intersects with camera and object
+            block_finder.ray_marker_pub.publish(block_finder.ray_marker)
+
+        block_finder.rect_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.rect_seg_img, "bgr8"))
+        block_finder.red_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["red"], "bgr8"))
+        block_finder.green_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["green"], "bgr8"))
+        block_finder.yellow_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["yellow"], "bgr8"))
+        block_finder.blue_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["blue"], "bgr8"))
+
+        
+
+        # Sleep
         block_finder.pub_rate.sleep()
 
     return 

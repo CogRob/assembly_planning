@@ -21,80 +21,17 @@ from std_msgs.msg import String, Int32, Header, Empty
 from sensor_msgs.msg import Image, CameraInfo, Range
 from geometry_msgs.msg import Pose, PoseStamped, PoseArray, Point, Quaternion
 
+from visualization_msgs.msg import Marker, MarkerArray
+
 from image_geometry import PinholeCameraModel
 
 from gazebo_msgs.srv import SpawnModel, DeleteModel
 from baxter_core_msgs.srv import SolvePositionIK, SolvePositionIKRequest
 
+from baxter_pykdl import baxter_kinematics
+
+SIM = True
 REAL = False
-SIM  = True
-
-class BlockSpawner():
-    def __init__(self):
-        self.blocks = []
-
-    def spawn_block(self, block_pose, block_reference, block_dim, block_color):
-        if(block_dim == None):
-            block_dim = random.choice(["1x1", "1x2", "1x3"])
-        if(block_color == None):
-            block_color = random.choice(["blue", "red", "yellow", "green"])
-
-        rospy.loginfo("Loading a %s, %s, megablok from file", block_color, block_dim)
-
-        block_dir = rospkg.RosPack().get_path('lego_gazebo') + "/models/"
-        block_path = block_dir + "megabloks" + block_dim + "_" + block_color + "/model.sdf"
-
-        block_xml = ''
-        with open (block_path, "r") as block_file:
-            block_xml = block_file.read().replace('\n', '')
-        
-        rospy.wait_for_service('/gazebo/spawn_sdf_model')
-
-
-        if(block_pose == None): 
-            block_pos_x = random.uniform(1 -.4, 1 + .4)
-            block_pos_y = random.uniform(-.4, .4)
-            block_pos_z = 0.7825 # Height of table
-
-            #block_rot = random.uniform(0, math.pi)
-            block_rot = -math.pi/4
-
-            rospy.loginfo("Creating a block with random location x: %f, y: %f, z: %f, theta: %f", block_pos_x, block_pos_y, block_pos_z, block_rot * 180.0 / math.pi)
-            
-            block_position = Point(x = block_pos_x, y = block_pos_y, z = block_pos_z)
-            block_orientation = Quaternion(*tf_conversions.transformations.quaternion_from_euler(0, 0, block_rot))
-            print(type(block_orientation))
-            block_pose = Pose(position=block_position, orientation = block_orientation)
-
-        else:
-            block_pos_x = pose.position.x
-            block_pos_y = pose.position.y
-            block_pos_z = pose.position.z
-
-            rospy.loginfo("Creating a block  with set location x: %f, y: %f, z: %f", block_pos_x, block_pos_y, block_pos_z)
-
-
-        try:
-            spawn_sdf = rospy.ServiceProxy('/gazebo/spawn_sdf_model', SpawnModel)
-            block_handle = "block_" + str(len(self.blocks)) + "_" + block_dim + "_" + block_color
-
-            resp_sdf = spawn_sdf(block_handle, block_xml, "/",
-                                block_pose, block_reference)
-
-        except rospy.ServiceException, e:
-            rospy.logerr("Spawn SDF (BLOCK) service call failed: {0}".format(e))
-
-        self.blocks.append(block_handle)
-
-    def delete_blocks(self):
-        try:
-            delete_model = rospy.ServiceProxy('/gazebo/delete_model', DeleteModel)
-            for block in self.blocks:
-                resp_delete = delete_model(block)
-        except rospy.ServiceException, e:
-            rospy.loginfo("Delete Model service call failed: {0}".format(e))
-
-
 
 
 # Most of this is from PickAndPlace Baxter demo
@@ -115,24 +52,37 @@ class BlockPicker():
         print("Enabling robot... ")
         self._rs.enable()
         self.block_detected = False
-        self.block_pose = Pose()
+        self.block_poses = []
+        self.pose = Pose()
 
     def subscribe(self):
-        topic = "/block_finder/left_hand/block_poses"
+        topic = "/block_finder/" + self._limb_name + "_hand" + "/block_poses"
         self.pose_sub = rospy.Subscriber(topic, PoseArray, self.pose_callback)
 
     def pose_callback(self, data):
-        rospy.loginfo("Block found!")
+        curr_block_poses = []
         poses = data.poses
-        pose = poses[0]
 
-        block_position = pose.position
+        for pose in poses:
+            #block_position.x -= (.75-.6725)
+            #block_position.y -= (.15 - .1265)  
+            pose.position.z = 0.05
 
-        #block_position.x -= (.75-.6725)
-        #block_position.y -= (.15 - .1265)  
-        block_position.z = 0.2 
-        self.block_pose = block_position
-        self.block_detected = True
+            starting_orientation = Quaternion(
+                            x=-0.0249590815779,
+                            y=0.999649402929,
+                            z=0.00737916180073,
+                            w=0.00486450832011
+                            )
+            pose.orientation = starting_orientation
+        
+
+            curr_block_poses.append(pose)
+        self.block_poses = curr_block_poses
+
+        #TODO: uncomment!
+        #self.block_detected = True
+
 
 
     def move_to_start(self, start_angles=None):
@@ -192,6 +142,7 @@ class BlockPicker():
         rospy.sleep(1.0)
 
     def _approach(self, pose):
+        print("Approaching ", pose)
         approach = copy.deepcopy(pose)
         # approach with a pose the hover-distance above the requested pose
         approach.position.z = approach.position.z + self._hover_distance
@@ -214,6 +165,7 @@ class BlockPicker():
         self._guarded_move_to_joint_position(joint_angles)
 
     def _servo_to_pose(self, pose):
+        print("Servoing to pose: ", pose)
         # servo down to release
         joint_angles = self.ik_request(pose)
         self._guarded_move_to_joint_position(joint_angles)
@@ -232,8 +184,15 @@ class BlockPicker():
 
 
     def move_to_pose(self, pose):
+        rospy.loginfo("Moving to pose x:%f, y:%f, z:%f", pose.position.x, pose.position.y, pose.position.z)
         self._approach(pose)
         self._servo_to_pose(pose)
+
+
+    def move_to_above_pose(self, pose, height):
+        rospy.loginfo("Moving above detected block")
+        pose.position.z = height
+        self.move_to_pose(pose)
 
     def place(self, pose):
         # servo above pose
@@ -245,7 +204,71 @@ class BlockPicker():
         # retract to clear object
         self._retract()
 
-def spawn_table(table_pose=Pose(position=Point(x=1.0, y=0.0, z=0.0)), table_reference_frame="world"):
+
+    def translate_camera(self, distance = 0.05, angle = math.pi/4):
+        curr_q = self.pose.orientation
+
+        # Get rotation matrix from current orientation
+        rot = tf.transformations.quaternion_matrix([curr_q.w, curr_q.x, curr_q.y, curr_q.z])
+
+
+        print(rot)
+        trans_cam = np.zeros((1,4))
+
+        # Keep same orientation, only translate in the direction of the angle by distance
+        trans_cam[0, 0] = distance * math.cos(angle)
+        trans_cam[0, 1] = distance * math.sin(angle)
+        trans_cam[0, 2] = 0
+        trans_cam[0, 3] = 1
+
+
+        trans_world = np.dot(trans_cam, rot)
+        print("Camera translation: ", trans_cam)
+
+        trans_cam[0, :2] /= trans_cam[0, 3]
+
+        new_pose = Pose()
+        new_pose.position.x = self.pose.position.x + trans_cam[0, 0]
+        new_pose.position.y = self.pose.position.y + trans_cam[0, 1]
+        new_pose.position.z = self.pose.position.z + trans_cam[0, 2]
+        """
+        no_rot_orientation = Quaternion()
+        no_rot_orientation.w = 1
+        no_rot_orientation.x = 0
+        no_rot_orientation.y = 0
+        no_rot_orientation.z = 0
+        """
+
+        new_pose.orientation = self.pose.orientation
+        
+        self.move_to_pose(new_pose)
+
+    def fixate_camera(self, center_pixel_loc):
+        CENTER_X_PIXEL_THRESH = 10
+        CENTER_Y_PIXEL_THRESH = 10
+        
+        curr_pixel_offset = self.current_pixel_loc - self.center_pixel_loc
+        center_distance = math.hypot(curr_pixel_offset[0], curr_pixel_offset[1])
+
+        while(center_distance > CENTER_PIXEL_THRESH):
+            # last_pixel_offset = curr_pixel_offset.copy()
+
+            # find distance from current_pixel_loc to center_pixel_loc
+            #curr_pixel_offset = self.current_pixel_loc - self.center_pixel_loc
+
+            #pitch_angle = math.pi/32 * (0.001) * curr_pixel_offset[1]
+            #yaw_angle =   math.pi/32 * (0.001) * curr_pixel_offset[0]
+            
+            pitch_angle = math.pi/32 * (0.001) * 20
+            yaw_angle =   math.pi/32 * (0.001) * 10
+
+            fixate_quaternion = tf.transformations.quaternion_from_euler(0, pitch_angle, yaw_angle)
+            
+            new_pose = Pose()
+            new_pose.position = self.pose.position
+
+
+def spawn_table(table_pose=Pose(position=Point(x=.8, y=0.0, z=0.0)), table_reference_frame="world"):
 
     # Get Models' Path
     model_path = rospkg.RosPack().get_path('baxter_sim_examples')+"/models/"
@@ -279,80 +302,138 @@ def delete_table():
 def main():
     rospy.init_node("block_picker")
 
-    # Load Gazebo Models via Spawning Services
-    # Note that the models reference is the /world frame
-    # and the IK operates with respect to the /base frame
-    spawn_table()
-
-    # Remove models from the scene on shutdown
-    rospy.on_shutdown(delete_table)
-
-    # Wait for the All Clear from emulator startup
-    # TODO: Change this when running on real baxter
-    rospy.wait_for_message("/robot/sim/started", Empty)
-
-    limb = 'left'
+    limb = 'right'
     hover_distance = 0.15 # meters
 
     # Starting Joint angles for left arm
-    starting_joint_angles = {'left_w0': 0.6699952259595108,
-                             'left_w1': 1.030009435085784,
-                             'left_w2': -0.4999997247485215,
-                             'left_e0': -1.189968899785275,
-                             'left_e1': 1.9400238130755056,
-                             'left_s0': -0.08000397926829805,
-                             'left_s1': -0.9999781166910306}
-    block_spawner = BlockSpawner()
-    for i in range(10):
-        block_spawner.spawn_block(block_pose=None, block_reference = "world", block_dim = None, block_color = "blue")
+    starting_joint_angles = {limb + "_w0": -0.6699952259595108,
+                             limb + "_w1": 1.030009435085784,
+                             limb + "_w2": 0.6, #-0.4999997247485215,
+                             limb + "_e0": 1.189968899785275,
+                             limb + "_e1": 1.9400238130755056,
+                             limb + "_s0": -0.08000397926829805,
+                             limb + "_s1": -0.9999781166910306}
 
-    rospy.on_shutdown(block_spawner.delete_blocks)
-    
 
     block_picker = BlockPicker(limb, hover_distance)
     block_picker.subscribe()
 
+    baxter_kin = baxter_kinematics('right')
+
+    
+
     # An orientation for gripper fingers to be overhead and parallel to the obj
-    overhead_orientation = Quaternion(
+    #overhead_orientation = Quaternion(
+    #                        x=-0.0249590815779,
+    #                        y=0.999649402929,
+    #                        z=0.00737916180073,
+    #                        w=0.00486450832011)
+
+    starting_orientation = Quaternion(
                             x=-0.0249590815779,
                             y=0.999649402929,
                             z=0.00737916180073,
                             w=0.00486450832011)
-
-    starting_orientation = Quaternion(
-                            x=0,
-                            y=0,
-                            z=0,
-                            w=0)
-     
+                            #x=0,
+                            #y=0,
+                            #z=0,
+                            #w=0)
+    block_picker.gripper_open()
     # Move to the desired starting angles
     block_picker.move_to_start(starting_joint_angles)
-    # Move to the desired starting angles
-    
-    start_position = Point()
-    start_position.x = 0.2
-    start_position.y = 0.0
-    start_position.z = 0.2
+    curr_kin = baxter_kin.forward_position_kinematics()
 
-    
+    block_picker.pose.position.x =    curr_kin[0]
+    block_picker.pose.position.y =    curr_kin[1]
+    block_picker.pose.position.z =    curr_kin[2]
+    block_picker.pose.orientation.w = curr_kin[6]
+    block_picker.pose.orientation.x = curr_kin[3]
+    block_picker.pose.orientation.y = curr_kin[4]
+    block_picker.pose.orientation.z = curr_kin[5]
+    """
+    block_picker.pose.orientation.w = 1
+    block_picker.pose.orientation.x = 0
+    block_picker.pose.orientation.y = 0
+    block_picker.pose.orientation.z = 0
+    """
 
-    start_pose = Pose(position=start_position, orientation=starting_orientation)
+    block_choice = 0
 
-    #block_picker.move_to_pose(start_pose)
-    # TODO: Set above
     rate = rospy.Rate(10)
 
     idx = 0
+    above_block = False
     while not rospy.is_shutdown():
-        if(block_picker.block_detected):
-            rospy.loginfo("Block has been detected")
-            # Pick up block
-            
-            block_picker.move_to_pose(Pose(position = block_picker.block_pose, orientation=overhead_orientation))
-            block_picker.block_detected = False     
+        if(SIM):
+            rospy.loginfo("Running block_picker on Simulated Baxter")
+            if(block_picker.block_detected):
+                # At least one block has been found
+                rospy.loginfo("At least one block has been found")
+
+                if(above_block == True):
+                    rospy.loginfo("Picking block up")
+                    block_picker.move_to_above_pose(block_picker.block_poses[block_choice], -.14)
+                    block_picker.gripper_close()
+                    block_picker.move_to_above_pose(block_picker.block_poses[block_choice], .14)
+
+                    # Only bottom left corner of table
+                    new_block_pos_x = random.uniform(.9 -.5, .8)
+                    new_block_pos_y = random.uniform(0, -.4)
+
+                    new_block_pos_z = 0.125 # Height of table
+                    new_block_position = Point(x = new_block_pos_x, y = new_block_pos_y, z = new_block_pos_z)
+
+                    block_picker.move_to_above_pose(Pose(position = new_block_position, orientation=starting_orientation), .14)
+                    block_picker.move_to_above_pose(Pose(position = new_block_position, orientation=starting_orientation), -.14)
+                    block_picker.gripper_open()
+                    block_picker.move_to_start(starting_joint_angles)
+
+                    above_block = False
+                
+                else:
+                    rospy.loginfo("%d blocks have been detected", len(block_picker.block_poses))
+                    block_choice = int(raw_input("Which block do you want to pick up? (0-" + str(len(block_picker.block_poses))))
+
+                    rospy.loginfo("Moving gripper to %f above block")
+                    
+                    block_picker.move_to_above_pose(block_picker.block_poses[block_choice], .14)
+                    above_block = True
+
+            else:
+                """
+                rospy.loginfo("Can't find block, moving to a new location.")
+                # Move to a random location in an attempt to find a block
+                new_block_pos_x = random.uniform(.9 -.5, .8)
+                new_block_pos_y = random.uniform(0, -.4)
+                new_block_pos_z = 0.125 # Height of table
+                new_block_position = Point(x = new_block_pos_x, y = new_block_pos_y, z = new_block_pos_z)
+
+                block_picker.move_to_above_pose(Pose(position = new_block_position, orientation=starting_orientation), .14)
+                """
+        
+                block_picker.translate_camera()
+
+                curr_kin = baxter_kin.forward_position_kinematics()
+
+                block_picker.pose.position.x =    curr_kin[0]
+                block_picker.pose.position.y =    curr_kin[1]
+                block_picker.pose.position.z =    curr_kin[2]
+                """
+                block_picker.pose.orientation.w = 1
+                block_picker.pose.orientation.x = 0
+                block_picker.pose.orientation.y = 0
+                block_picker.pose.orientation.z = 0
+                """
+                block_picker.pose.orientation.w = curr_kin[6]
+                block_picker.pose.orientation.x = curr_kin[3]
+                block_picker.pose.orientation.y = curr_kin[4]
+                block_picker.pose.orientation.z = curr_kin[5
+
+        else:
+            rospy.loginfo("Running block_picker on Real Baxter")
 
         rate.sleep()
     return
 
-if __name__ == '__main__':
-     main()
+if __name__ == '__main__': 
+    main()           

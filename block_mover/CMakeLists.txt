@@ -12,6 +12,7 @@ find_package(catkin REQUIRED COMPONENTS
   baxter_tools
   gazebo_ros
   gazebo_msgs
+  visualization_msgs
 )
 
 catkin_package(
@@ -25,6 +26,7 @@ catkin_package(
   baxter_tools
   gazebo_ros
   gazebo_msgs
+  visualization_msgs
 )
 
 
@@ -35,6 +37,7 @@ catkin_package(
 install(PROGRAMS
    scripts/block_finder.py
    scripts/block_picker.py
+   scripts/block_spawner.py
    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

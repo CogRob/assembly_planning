@@ -23,7 +23,7 @@ if(REAL):
 
     GRN_LOW_HUE     = 50
     GRN_HIGH_HUE    = 80
-    GRN_LOW_SAT     = 0
+    GRN_LOW_SAT     = 100
     GRN_HIGH_SAT    = 255
     GRN_LOW_VAL     = 0
     GRN_HIGH_VAL    = 255
@@ -80,10 +80,11 @@ color_vals = {
 
 #loading our BW image
 images = []
-for i in range(1, 11):
+for i in range(0, 10):
     img = cv2.imread("../images/green_block_" + str(i) + ".jpg", cv2.IMREAD_COLOR)
     newsize = (int(img.shape[1]*0.3), int(img.shape[0]*0.3))
     img = cv2.resize(img, newsize)
+    orig_img = img.copy()
 
     print("Scaled down image resolution: ", newsize)
 
@@ -161,47 +162,7 @@ for i in range(1, 11):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
 
-    """ 
-    # PCA
-    print(img.shape)
-
-    h, w = img.shape
-
-    #From a matrix of pixels to a matrix of coordinates of non-black points.
-    #(note: mind the col/row order, pixels are accessed as [row, col]
-    #but when we draw, it's (x, y), so have to swap here or there)
-    mat = []
-    for col in range(w):
-        for row in range(h):
-            if img[row, col] <= 200:
-                print(img[row,col])
-                mat.append([col, row])
-                img[row, col] = 0
-
-    cv2.imshow('image', img)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-
-    mat = np.array(mat).astype(np.float32) #have to convert type for PCA
-
-    #mean (e. g. the geometrical center) 
-    #and eigenvectors (e. g. directions of principal components)
-    m, e = cv2.PCACompute(mat, mean = None)
-
-    #now to draw: let's scale our primary axis by 100, 
-    #and the secondary by 50
-    center = tuple(m[0])
-    endpoint1 = tuple(m[0] + e[0]*100)
-    endpoint2 = tuple(m[0] + e[1]*50)
-
-    cv2.circle(img, center, 5, 255)
-    cv2.line(img, center, endpoint1, 255)
-    cv2.line(img, center, endpoint2, 255)
-
-    cv2.imshow("out.jpg", img)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-    """
+    
 
 
     # Canny Edge Detectio
@@ -242,6 +203,49 @@ for i in range(1, 11):
             cv2.line(hough_img,(x1,y1),(x2,y2),(0,0,0),1)
     """
 
+    # PCA
+    pca_img = img.copy()
+    h, w = gray.shape
+
+    #From a matrix of pixels to a matrix of coordinates of non-black points.
+    #(note: mind the col/row order, pixels are accessed as [row, col]
+    #but when we draw, it's (x, y), so have to swap here or there)
+    mat = []
+    for col in range(w):
+        for row in range(h):
+            if canny_img[row, col] <= 200:
+                #print(img[row,col])
+                mat.append([col, row])
+
+    mat = np.array(mat).astype(np.float32) #have to convert type for PCA
+
+    #mean (e. g. the geometrical center) 
+    #and eigenvectors (e. g. directions of principal components)
+    m, e = cv2.PCACompute(mat, mean = None)
+
+    #now to draw: let's scale our primary axis by 100, 
+    #and the secondary by 50
+    center = tuple(m[0])
+    endpoint1 = tuple(m[0] + e[0]*100)
+    endpoint2 = tuple(m[0] + e[1]*50)
+
+    cv2.circle(pca_img, center, 5, 255)
+    # Major Axis
+    cv2.line(pca_img, center, endpoint1, 255)
+
+    # Minor Axis
+    #cv2.line(pca_img, center, endpoint2, 255)
+
+
+    # Calculate angle of major axis
+    major_x = endpoint1[0] - center[0]
+    major_y = endpoint1[1] - center[1]
+    angle = math.atan2(major_y, major_x)    
+    angle = 180 - (angle * 180 / np.pi) % 180
+
+
+
+    """
     # Probabilistic Hough
     minLineLength = 40
     maxLineGap = 5
@@ -267,6 +271,7 @@ for i in range(1, 11):
 
     brisk_img = cv2.drawKeypoints(img, kp_brisk, brisk_img)
     """
+    """
     plt.subplot("231")
     plt.imshow(rect_img,cmap='gray')
     plt.title("HSV Thresholded Image")
@@ -288,16 +293,80 @@ for i in range(1, 11):
     plt.suptitle("Image " + str(i))
     plt.show()
     """
-    
-    plt.subplot(4,6, i)
-    plt.imshow(canny_img, cmap='gray')
+    plt.subplot(4, 10, i+1)
+    plt.imshow(orig_img, cmap='gray')
+    plt.title(str(angle))
 
-    plt.subplot(4, 6, i+11)
-    plt.imshow(hough_p_img, cmap='gray')
+
+    plt.subplot(4, 10, i+11)
+    plt.imshow(erode_1, cmap='gray')
+    plt.title(str(angle))
+    
+    plt.subplot(4, 10, i+21)
+    plt.imshow(canny_img, cmap='gray')
+    plt.title(str(angle))
+
+    plt.subplot(4, 10, i+31)
+    plt.imshow(pca_img, cmap='gray')
+    plt.title("X: " + str(major_x)  + " Y: " +  str(major_y) + " Angle: "  + str(angle))
 
 
 
 plt.show() 
+
+
+def find_viewpoint():
+    # First move along bisector until change in angle is less than threshold
+    motion = MOTION_ALONG_BISECTOR
+    speed = POSITIVE_SPEED
+    delta_w = DELTA_W_THRESH + 1
+    prev_w = calculate_major_angle(img)
+
+    while(delta_w >= DELTA_W_THRESH):
+        # Translate camera (parallel to image plane)
+        translate_camera(speed, motion, prev_w)
+
+        # First find center of blob
+        center = find_block_center(img)
+
+        # Then fixate on it
+        fixate_camera(center)
+
+        # Determine angle that major axis makes with image x axis (horizontal)
+        w = calculate_major_angle(img)
+
+        delta_w = prev_w - w
+
+        if(delta_w > 0):
+            speed = NEGATIVE_SPEED
+    
+    motion = MOTION_ACROSS_BISECTOR
+    speed = POSITIVE_SPEED
+    delta_w = DELTA_W_THRESH + 1
+
+    prev_w = calculate_minor_angle(img)
+
+    while(delta_w >= DELTA_W_THRESH):
+        # Translate camera (parallel to image plane)
+        translate_camera(speed, motion, prev_w)
+
+        # First find center of blob
+        center = find_block_center(img)
+
+        # Then fixate on it
+        fixate_camera(center)
+
+        # Determine angle that major axis makes with image x axis (horizontal)
+        w = calculate_major_angle(img)
+
+        delta_w = prev_w - w
+
+        if(delta_w < 0):
+            speed = POSITIVE_SPEED
+
+    # Final angle should be ~90 degrees
+
+    return w
 
 
 """

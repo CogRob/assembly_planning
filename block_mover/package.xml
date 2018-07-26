@@ -18,6 +18,7 @@
   <depend>baxter_tools</depend>
   <depend>gazebo_ros</depend>
   <depend>gazebo_msgs</depend>
+  <depend>visualization_msgs</depend>
 
   <export>
     <gazebo_ros gazebo_model_path="${prefix}/models"/>
