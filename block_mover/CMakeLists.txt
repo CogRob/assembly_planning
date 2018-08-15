@@ -38,6 +38,8 @@ install(PROGRAMS
    scripts/block_finder.py
    scripts/block_picker.py
    scripts/block_spawner.py
+   scripts/camera_controller.py
+   scripts/edge_finder.py
    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

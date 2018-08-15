@@ -38,7 +38,7 @@ function create_config(){
 <model>
   <name>megabloks1x$1_$2</name>
   <version>1.0</version>
-  <sdf version='1.5'>model.sdf</sdf>
+  <sdf version='1.4'>model.sdf</sdf>
 
   <author>
    <name>Priyam Parashar</name>
@@ -66,9 +66,21 @@ function create_sdf(){
   echo "<?xml version='1.0'?>
 <sdf version='1.4'> <!-- changed from 1.5 to be compatible with Gazebo2 -->
   <model name=\"megabloks1x$1_$2\">
-    <static>true</static> <!--for now, will remove when we need to learn controls for this-->
+    <static>false</static> <!--for now, will remove when we need to learn controls for this-->
     <link name=\"brick\">
       <pose>0 0 0.005  0 0 0</pose>
+      <inertial>
+          <inertia>
+            <ixx>0.01</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>0.01</iyy>
+            <iyz>0</iyz>
+            <izz>0.01</izz>
+          </inertia>
+          <mass>0.1</mass>
+          <pose> 0 0 0.005 0 0 0 </pose>
+      </inertial>
       <collision name=\"collision\">
         <geometry>
           <mesh>

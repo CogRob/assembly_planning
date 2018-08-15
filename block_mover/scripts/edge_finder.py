@@ -82,21 +82,42 @@ color_vals = {
     "teal":   (255, 60, 0)
 }
 
-#loading our BW image
+# Loading Image
 images = []
-for i in range(0, 10):
-    img = cv2.imread("../images/green_block_" + str(i) + ".jpg", cv2.IMREAD_COLOR)
-    newsize = (int(img.shape[1]*0.3), int(img.shape[0]*0.3))
+
+
+cap = cv2.VideoCapture('../images/block_video.MOV')
+current_frame = 0
+
+while(True):
+    ret, frame = cap.read()
+
+    current_frame += 1
+
+    if(not current_frame%4 == 1):
+        continue
+
+#for i in range(0, 10):
+    #img_1 = cv2.imread("../images/green_block_" + str(i) + ".jpg", cv2.IMREAD_COLOR)
+    img = frame
+
+    #aspect_ratio = img.shape[0] / img.shape[1]
+    newsize = (1280, 800)
+    #newsize = (int(img.shape[1]*0.3), int(img.shape[0]*0.3))
+
+    print("size = ", newsize)
     img = cv2.resize(img, newsize)
     orig_img = img.copy()
 
     print("Scaled down image resolution: ", newsize)
+
     if(USE_HSV):
         hsv_img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
         #for color in colors:
         # For now, just test with color green
         color = "green"
+        
         low_h = colors[color]["low_h"]
         high_h = colors[color]["high_h"]
         low_s = colors[color]["low_s"]
@@ -111,11 +132,11 @@ for i in range(0, 10):
 
             hsv_mask = hsv_mask_1 | hsv_mask_2
 
-            # Apply mask to original image
 
         else:
             hsv_mask = cv2.inRange(hsv_img, np.array([low_h, low_s, low_v]), np.array([high_h, high_s, high_v]))
-
+        
+        # Apply mask to original image
         masked_img = cv2.bitwise_and(img, img, mask=hsv_mask)
 
         #Morphological opening (remove small objects from the foreground)
@@ -126,7 +147,7 @@ for i in range(0, 10):
         dilate_2 = cv2.dilate(dilate_1, np.ones((10,10), np.uint8), iterations=1)
         erode_2 = cv2.erode(dilate_2, np.ones((10,10), np.uint8), iterations=1)
 
-        ret, thresh = cv2.threshold(erode_2,157,255,0)
+        ret, thresh = cv2.threshold(erode_1,157,255,0)
 
         contours, hierarchy = cv2.findContours(thresh,cv2.RETR_TREE,cv2.CHAIN_APPROX_NONE)
 
@@ -138,10 +159,10 @@ for i in range(0, 10):
         min_area_mask = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         min_area_mask.fill(0)
         
-        
+
         for c in contours:
             area = cv2.contourArea(c)
-            if(area > 1000):
+            if(area > 2000):
                 large_contours.append(c)
 
                 # Min Area Rectangle
@@ -149,19 +170,20 @@ for i in range(0, 10):
                 box = cv2.cv.BoxPoints(rect)
                 box = np.int0(box)
                 cv2.drawContours(min_area_mask, [box], 0, (255,255,255) , -1)
+                print("Min area: ", min_area_mask.shape)
+                print("Image: ", img.shape)
                 masked_img = cv2.bitwise_and(img, img, mask=min_area_mask)
 
-                # Bounding Rectangle 
+                # Bounding Rectangle
                 x, y, w, h = cv2.boundingRect(c)
                 cv2.rectangle(rect_img, (x, y), (x+w, y+h), color_vals[color], 2)
-                
+
                 img = img[y:y+h, x:x+w]
+                erode_cropped = erode_1[y:y+h, x:x+w]
+
+                break
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-
-    
-
 
     # Canny Edge Detection
     """
@@ -171,9 +193,10 @@ for i in range(0, 10):
     canny_img = 255 - canny_img
     #canny_img = np.logical_not(canny_img)
     """
-
-    canny_img = feature.canny(gray, sigma=0.75)
+    gray_blur = cv2.medianBlur(gray, 7)
+    canny_img = feature.canny(gray_blur, sigma=1)
     canny_img = canny_img.astype(np.uint8)
+
 
     #canny_img = 255 - 255*canny_img
 
@@ -181,37 +204,13 @@ for i in range(0, 10):
     contours = cv2.findContours(canny_img, type(canny_img))
 
     for c in contours:
-        aspect_ratio = 
+        aspect_ratio =
     """
 
 
     #canny_img = cv2.dilate(canny_img, np.ones((2,2), np.uint8), iterations=1)
     #canny_img = cv2.erode(canny_img, np.ones((2,2), np.uint8), iterations=1)
 
-    # Hough Transform
-    hough_img = img.copy()
-
-    # Standard Hough
-    lines = cv2.HoughLines(canny_img,2,np.pi/720,20)
-    angles = []
-    if(lines is not None):
-        print("There are " + str(len(lines[0])) + " lines")
-        for rho, theta in lines[0][:50]:
-            angles.append(theta)
-            a = np.cos(theta)
-            b = np.sin(theta)
-            x0 = a*rho
-            y0 = b*rho
-            print("Image ", i, " has theta ", theta, " and rho ", rho)
-            x1 = int(x0 + 1000*(-b))
-            y1 = int(y0 + 1000*(a))
-            x2 = int(x0 - 1000*(-b))
-            y2 = int(y0 - 1000*(a))
-
-            cv2.line(hough_img,(x1,y1),(x2,y2),(0,0,0),1)
-
-    sorted_angles = sorted(angles)
-    print(sorted_angles)
 
     # PCA
     pca_img = img.copy()
@@ -223,17 +222,17 @@ for i in range(0, 10):
     mat = []
     for col in range(w):
         for row in range(h):
-            if canny_img[row, col] <= 200:
+            if erode_cropped[row, col] > 0:
                 #print(img[row,col])
                 mat.append([col, row])
 
     mat = np.array(mat).astype(np.float32) #have to convert type for PCA
 
-    #mean (e. g. the geometrical center) 
+    #mean (e. g. the geometrical center)
     #and eigenvectors (e. g. directions of principal components)
     m, e = cv2.PCACompute(mat, mean = None)
 
-    #now to draw: let's scale our primary axis by 100, 
+    #now to draw: let's scale our primary axis by 100,
     #and the secondary by 50
     center = tuple(m[0])
     endpoint1 = tuple(m[0] + e[0]*100)
@@ -241,21 +240,58 @@ for i in range(0, 10):
 
     cv2.circle(pca_img, center, 5, 255)
     # Major Axis
-    cv2.line(pca_img, center, endpoint1, 255)
+    cv2.line(pca_img, center, endpoint1, 255, 4)
 
     # Minor Axis
-    #cv2.line(pca_img, center, endpoint2, 255)
+    cv2.line(pca_img, center, endpoint2, 255, 4)
 
 
     # Calculate angle of major axis
     major_x = endpoint1[0] - center[0]
     major_y = endpoint1[1] - center[1]
-    angle = math.atan2(major_y, major_x)    
-    angle = 180 - (angle * 180 / np.pi) % 180
+    minor_x = endpoint2[0] - center[0]
+    minor_y = endpoint2[1] - center[1]
+
+    angle_rad_major = math.atan2(major_y, major_x)
+
+    angle_rad_minor = math.atan2(minor_y, minor_x)
+
+    angle = 180 - (angle_rad_major * 180 / np.pi) % 180
 
 
-
+    # Hough Transform
     """
+    hough_img = img.copy()
+
+    # Standard Hough
+    lines = cv2.HoughLines(canny_img,2,np.pi/720,20)
+    angles = []
+
+    if(lines is not None):
+        print("There are " + str(len(lines[0])) + " lines")
+        for rho, theta in lines[0][:100]:
+            
+            angles.append(theta)
+            a = np.cos(theta)
+            b = np.sin(theta)
+            x0 = a*rho
+            y0 = b*rho
+            #print("Image ", i, " has theta ", theta, " and rho ", rho)
+            x1 = int(x0 + 1000*(-b))
+            y1 = int(y0 + 1000*(a))
+            x2 = int(x0 - 1000*(-b))
+            y2 = int(y0 - 1000*(a))
+            if(math.fabs(theta - angle_rad_major) < math.pi/132):
+                cv2.line(hough_img,(x1,y1),(x2,y2),(0,0,0),1)
+            
+            if(math.fabs(theta - angle_rad_minor) < math.pi/132):
+                cv2.line(hough_img,(x1,y1),(x2,y2),(0,0,255),1)
+
+    sorted_angles = sorted(angles)
+    print(sorted_angles)
+    """
+    
+
     # Probabilistic Hough
     """
     minLineLength = 20
@@ -267,6 +303,7 @@ for i in range(0, 10):
             cv2.line(hough_p_img,(x1,y1),(x2,y2),(0,0,0),1)
     """
 
+    """
     harris_img = gray.copy()
     # Find Corners
     dst = cv2.cornerHarris(harris_img,2,3,0.04)
@@ -283,6 +320,10 @@ for i in range(0, 10):
 
     brisk_img = cv2.drawKeypoints(img, kp_brisk, brisk_img)
     """
+
+
+
+    
     """
     plt.subplot("231")
     plt.imshow(rect_img,cmap='gray')
@@ -305,24 +346,44 @@ for i in range(0, 10):
     plt.suptitle("Image " + str(i))
     plt.show()
     """
-    plt.subplot(4, 10, i+1)
+    cv2.namedWindow("Axes", cv2.WND_PROP_FULLSCREEN)          
+    cv2.setWindowProperty("Axes", cv2.WND_PROP_FULLSCREEN, cv2.cv.CV_WINDOW_FULLSCREEN)
+       
+    cv2.imshow("Axes", pca_img)
+
+    cv2.waitKey(1)
+
+
+    """
+    #plt.subplot(6,10,i + 1)
+    plt.subplot(6,1,1)
     plt.imshow(orig_img, cmap='gray')
     plt.title(str(angle))
 
 
-    plt.subplot(4, 10, i+11)
-    plt.imshow(erode_1, cmap='gray')
+    #plt.subplot(6, 10, i+11)
+    plt.subplot(6, 1, 2)
+    plt.imshow(erode_cropped, cmap='gray')
     plt.title(str(angle))
-    
-    plt.subplot(4, 10, i+21)
+
+    #plt.subplot(6, 10, i+21)
+    plt.subplot(6, 1, 3)
     plt.imshow(canny_img, cmap='gray')
     plt.title(str(angle))
 
-    plt.subplot(4, 10, i+31)
+    #plt.subplot(6, 10, i+31)
+    plt.subplot(6, 1, 4)
     plt.imshow(pca_img, cmap='gray')
-    plt.title("X: " + str(major_x)  + " Y: " +  str(major_y) + " Angle: "  + str(angle))
+    title = r'${:.0f}\degree%'.format(angle)
+    plt.title(title)
     
-plt.show() 
+    #plt.subplot(6, 10, i+41)
+    plt.subplot(6, 1, 5)
+    plt.imshow(hough_img, cmap='gray')
+    plt.title(str(angle))
+
+    plt.show()
+    """
 
 
 def find_viewpoint():
@@ -349,7 +410,7 @@ def find_viewpoint():
 
         if(delta_w > 0):
             speed = NEGATIVE_SPEED
-    
+
     motion = MOTION_ACROSS_BISECTOR
     speed = POSITIVE_SPEED
     delta_w = DELTA_W_THRESH + 1
@@ -386,7 +447,7 @@ def find_spherical_poses(n_obs, radius, center_point, theta, phi):
 
     for i in range(n_obs + 1):
         angle = min_angle + i * (max_angle - min_angle) / n_obs
-        
+
         pts[i, 0] = radius * math.cos(angle)
         pts[i, 1] = radius * math.sin(angle)
 
@@ -397,19 +458,19 @@ def find_spherical_poses(n_obs, radius, center_point, theta, phi):
                     [0 ,0, 1],
                     [0, 1, 0]]
                 )
-    
+
 
     pts_rot_xz = np.dot(pts, R)
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
 
     ax.plot(pts_rot_xz[:,0], pts_rot_xz[:,1], pts_rot_xz[:,2])
-    
+
     ax.plot(pts[:,0], pts[:,1], pts[:,2])
 
     plt.show()
 
-        
+
 
 
 
@@ -427,7 +488,7 @@ def main():
 
 
 
- 
-if __name__ == '__main__': 
-    main()         
+
+if __name__ == '__main__':
+    main()
 """
