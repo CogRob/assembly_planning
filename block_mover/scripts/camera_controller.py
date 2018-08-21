@@ -11,6 +11,7 @@ import tf
 import numpy as np
 import cv2
 from skimage import feature
+import pickle
 
 from cv_bridge import CvBridge
 
@@ -86,17 +87,29 @@ class CameraController():
     def __init__(self):
         self.model_state = None
         self.limb = "right"
-        self.center_loc = np.zeros(2)
         self.res_w = 1920
         self.res_h = 1080
-        self.pixel_loc = np.array([self.res_w/2, self.res_h/2]) # Location of camera center (in pixels)
-        self.pca_img = np.zeros((self.res_w, self.res_h,3), dtype=np.uint8)
+        self.center_loc = np.array([self.res_w/2, self.res_h/2]) # Location of camera center (in pixels)
+        self.pixel_loc = np.array([self.res_w/2, self.res_h/2]) # Location of blob center (in pixels)
+
+        self.orig_img = np.zeros((self.res_w, self.res_h,3), dtype=np.uint8)
         self.seg_img = np.zeros((self.res_w, self.res_h,3), dtype=np.uint8)
+        self.canny_img = np.zeros((self.res_w, self.res_h,1), dtype=np.uint8)
+        self.pca_img = np.zeros((self.res_w, self.res_h,3), dtype=np.uint8)
+        self.hough_img = np.zeros((self.res_w, self.res_h,3), dtype=np.uint8)
+
         self.bridge = CvBridge()
+        self.camera_centered = False
+        self.blob_detected = False
+
+        self.blob_angle = 0
 
     def publish(self):
-        self.pca_img_pub = rospy.Publisher("cam_controller/pca_img", Image, queue_size=1)
+        self.orig_img_pub = rospy.Publisher("cam_controller/orig_img", Image, queue_size=1)
         self.seg_img_pub = rospy.Publisher("cam_controller/seg_img", Image, queue_size=1)
+        self.canny_img_pub = rospy.Publisher("cam_controller/canny_img", Image, queue_size=1)
+        self.pca_img_pub = rospy.Publisher("cam_controller/pca_img", Image, queue_size=1)
+        self.hough_img_pub = rospy.Publisher("cam_controller/hough_img", Image, queue_size=1)
 
     def subscribe(self):
         self.cam_sub    = rospy.Subscriber("/free_camera/image_raw", Image, self.cam_callback)
@@ -140,7 +153,7 @@ class CameraController():
 
         #rospy.loginfo("Camera position set to %f, %f.", new_pose.position.x, new_pose.position.y)
 
-    def move_camera_in_plane(self, direction, motion_dist=0.1):
+    def move_camera_in_plane(self, direction, motion_dist=0.01):
         #rospy.loginfo("Moving camera in plane in direction %f ", direction)
 
         # Orientation should remain constant, only position should change
@@ -173,38 +186,93 @@ class CameraController():
 
         self.set_camera_pose(new_pose)
 
+    def camera_yaw(self, amount):
+        new_pose = Pose()
+        new_pose.position = self.model_state.pose.position # Pose should remain constant
+
+        # Only orientation changes
+        curr_orient = self.model_state.pose.orientation
+        curr_orient_arr = np.array([curr_orient.x, curr_orient.y, curr_orient.z, curr_orient.w])
+
+        # Rotation about z-axis by small amount
+        yaw = tf.transformations.quaternion_from_euler(0, 0, amount)
+
+        q_new = tf.transformations.quaternion_multiply(curr_orient_arr, yaw)
+
+        new_pose.orientation = Quaternion()
+        new_pose.orientation.x = q_new[0]
+        new_pose.orientation.y = q_new[1]
+        new_pose.orientation.z = q_new[2]
+        new_pose.orientation.w = q_new[3]
+
+        self.set_camera_pose(new_pose)
+
+    def camera_pitch(self, amount):
+        new_pose = Pose()
+        new_pose.position = self.model_state.pose.position # Pose should remain constant
+
+        # Only orientation changes
+        curr_orient = self.model_state.pose.orientation
+        curr_orient_arr = np.array([curr_orient.x, curr_orient.y, curr_orient.z, curr_orient.w])
+
+        # Rotation about y-axis
+        pitch = tf.transformations.quaternion_from_euler(0, amount, 0)
+
+        q_new = tf.transformations.quaternion_multiply(curr_orient_arr, pitch)
+
+        new_pose.orientation = Quaternion()
+        new_pose.orientation.x = q_new[0]
+        new_pose.orientation.y = q_new[1]
+        new_pose.orientation.z = q_new[2]
+        new_pose.orientation.w = q_new[3]
+
+        self.set_camera_pose(new_pose)
+
+
+
     def center_on_pixel(self):
-        rospy.loginfo("Centering camera on pixel_loc: (%f, %f)", pixel_loc[0], pixel_loc[1])
+        #rospy.loginfo("Centering camera on pixel_loc: (%f, %f)", self.pixel_loc[0], self.pixel_loc[1])
 
         # PID loop to center on pixel location
-        center_thresh = 5 # Attempt to get the camera centered within 5 pixels in x and y axes
+        center_thresh = 10.0 # Attempt to get the camera centered within 5 pixels in x and y axes
+        x_centered = False
+        y_centered = False
+
+        # Calculate how far off 
         
-        while(True):
-            # Calculate how far off 
-            curr_dist = np.linalg.norm(self.center_pixel - self.object_loc)
-            curr_angle = np.arctan()
+        x_offset = self.res_w/2 - self.pixel_loc[0] 
+        #rospy.loginfo("Object is off by %f pixels in x", x_offset)
 
-            if curr_dist < center_thresh:
-                rospy.loginfo("Pixel center has been reached")
-                break
-            else:
-                rospy.loginfo("Object is still off by %f pixels", curr_dist)
+        if(math.fabs(x_offset) > center_thresh):
+            #rospy.loginfo("Yawing camera")
+            self.camera_yaw(x_offset * math.pi / 400000)
+        else:
+            #rospy.loginfo("X offset of %f is within threshold %f", x_offset, center_thresh)
+            x_centered = True
+        
+        y_offset = self.res_h/2 - self.pixel_loc[1] 
+        #rospy.loginfo("Object is off by %f pixels in y", y_offset)
+        
+        if(math.fabs(y_offset) > center_thresh):
+            #rospy.loginfo("Pitching camera")
+            self.camera_pitch(-y_offset * math.pi / 400000)
+        else:
+            #rospy.loginfo("Y offset of %f is within threshold %f", y_offset, center_thresh)
+            y_centered = True
 
-            new_pose = Pose()
-            new_pose.position = self.model_state.pose.position # Pose should remain constant
 
-            # Orientation changes
-            curr_orient = self.model_state.pose.orientation
+        if(x_centered == True and y_centered == True):
+            self.camera_centered = True
+            self.pixel_loc = np.zeros(2)
+            
 
-            #new_pose.orientation = 
-
-            self.set_camera_pose(new_pose)
 
     '''
     Thresholds camera image and stores object centroid location (x,y) in Baxter's base frame.
     '''
     def cam_callback(self, data):
         img = self.bridge.imgmsg_to_cv2(data, "bgr8")
+        self.orig_img = img
 
         height, width, depth = img.shape
         low_s = 0
@@ -256,8 +324,10 @@ class CameraController():
         min_area_mask = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         min_area_mask.fill(0)
 
-        contour_area_thresh = 1000
+        contour_area_thresh = 10
         
+        self.blob_detected = True
+
         if(len(contours) > 0):
             for c in contours:
                 area = cv2.contourArea(c)
@@ -270,8 +340,6 @@ class CameraController():
                     box = cv2.cv.BoxPoints(rect)
                     box = np.int0(box)
                     cv2.drawContours(min_area_mask, [box], 0, (255,255,255) , -1)
-                    print("Min area: ", min_area_mask.shape)
-                    print("Image: ", img.shape)
                     masked_img = cv2.bitwise_and(img, img, mask=min_area_mask)
 
                     # Bounding Rectangle
@@ -282,39 +350,37 @@ class CameraController():
 
                     # TODO: To optimize, crop the eroded image...
                     erode_cropped = erode_1[y:y+h, x:x+w]
+                    cropped_w = y
+                    cropped_h = x
 
                     break
                 else:
                     rospy.loginfo("No contour with area larger than %d was found.", contour_area_thresh)
+                    self.blob_detected = False
                     return
 
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            
             # Canny Edge Detection
-            """
             canny_min_thresh = 10
             canny_max_thresh = 300
             canny_img = cv2.Canny(gray, canny_min_thresh, canny_max_thresh, apertureSize = 5)
             canny_img = 255 - canny_img
-            #canny_img = np.logical_not(canny_img)
             """
+            #canny_img = np.logical_not(canny_img)
             gray_blur = cv2.medianBlur(gray, 7)
             canny_img = feature.canny(gray_blur, sigma=1)
             canny_img = canny_img.astype(np.uint8)
+            """
+
 
             #canny_img = 255 - 255*canny_img
 
-            """
-            contours = cv2.findContours(canny_img, type(canny_img))
+            canny_img = cv2.dilate(canny_img, np.ones((1,1), np.uint8), iterations=1)
+            canny_img = cv2.erode(canny_img, np.ones((1,1), np.uint8), iterations=1)
 
-            for c in contours:
-                aspect_ratio =
-            """
-
-
-            #canny_img = cv2.dilate(canny_img, np.ones((2,2), np.uint8), iterations=1)
-            #canny_img = cv2.erode(canny_img, np.ones((2,2), np.uint8), iterations=1)
-
+            self.canny_img = canny_img
 
             # PCA
             pca_img = img.copy()
@@ -344,38 +410,38 @@ class CameraController():
 
             cv2.circle(pca_img, center, 5, 255)
             # Major Axis
-            cv2.line(pca_img, center, endpoint1, 255, 4)
+            cv2.line(pca_img, center, endpoint1, 255, 1)
 
             # Minor Axis
-            cv2.line(pca_img, center, endpoint2, 255, 4)
-            self.pca_img = pca_img
+            cv2.line(pca_img, center, endpoint2, 255, 1)
 
             self.pca_img = pca_img
+
             # Calculate angle of major axis
             major_x = endpoint1[0] - center[0]
             major_y = endpoint1[1] - center[1]
             minor_x = endpoint2[0] - center[0]
             minor_y = endpoint2[1] - center[1]
 
-            self.center_loc = center
+            #rospy.loginfo("x: %d, y: %d   center_x: %d, center_y: %d", x, y, center[0], center[1])
+            img_center = center + np.array([x,y])
+            self.pixel_loc = img_center
 
             angle_rad_major = math.atan2(major_y, major_x)
 
             angle_rad_minor = math.atan2(minor_y, minor_x)
 
-            angle = 180 - (angle_rad_major * 180 / np.pi) % 180
-
+            self.blob_angle = 180 - (angle_rad_major * 180 / np.pi) % 180
 
             # Hough Transform
-            """
             hough_img = img.copy()
 
+            """
             # Standard Hough
             lines = cv2.HoughLines(canny_img,2,np.pi/720,20)
             angles = []
 
             if(lines is not None):
-                print("There are " + str(len(lines[0])) + " lines")
                 for rho, theta in lines[0][:100]:
                     
                     angles.append(theta)
@@ -388,25 +454,22 @@ class CameraController():
                     y1 = int(y0 + 1000*(a))
                     x2 = int(x0 - 1000*(-b))
                     y2 = int(y0 - 1000*(a))
-                    if(math.fabs(theta - angle_rad_major) < math.pi/132):
-                        cv2.line(hough_img,(x1,y1),(x2,y2),(0,0,0),1)
+                    #if(math.fabs(theta - angle_rad_major) < math.pi/132):
+                    cv2.line(hough_img,(x1,y1),(x2,y2),(0,0,0),1)
                     
 
-                sorted_as = sorted(angles)
-                print(sorted_angles)
+                sorted_angles = sorted(angles)
             """
-            
 
             # Probabilistic Hough
-            """
-            minLineLength = 20
-            maxLineGap = 2
+            minLineLength = 50
+            maxLineGap = 10
             lines = cv2.HoughLinesP(canny_img,1,np.pi/180,10,maxLineGap,minLineLength)
             hough_p_img = img.copy()
             if(lines is not None):
                 for x1,y1,x2,y2 in lines[0]:
                     cv2.line(hough_p_img,(x1,y1),(x2,y2),(0,0,0),1)
-            """
+            self.hough_img = hough_p_img
 
             """
             harris_img = gray.copy()
@@ -490,12 +553,27 @@ class CameraController():
             """
 
         else:
+            self.blob_detected = False
             rospy.loginfo("No contours were found in the image.")
 
 def info_callback(self):
     #self.camera_model = PinholeCameraModel()
     #self.camera_model.fromCameraInfo(data)
     self.info_sub.unregister() # Unsubscribe after receiving CameraInfo first time
+
+
+
+def plot_results():
+    images = pickle.load("images.p")
+    poses = pickle.load("poses.p")
+    angles = pickle.load("angles.p")
+
+    for i in range(len(images)):
+        curr_img = images[i]
+        curr_pose = poses[i]
+        curr_angle = angles[i]
+
+
 
 if __name__=='__main__':
     rospy.init_node('camera_controller')
@@ -507,10 +585,17 @@ if __name__=='__main__':
     cam_cont.subscribe()
     radius = 1
     tilt = 0.0
-    divisor = 512
+    divisor = 16
     curr_step = 0
 
+
+    poses = []
+    images = []
+    angles = []
+    i = 0
+
     while not rospy.is_shutdown():
+        # Move to random location
         if(curr_step%divisor == 0):
             tilt += 0.1
 
@@ -519,6 +604,7 @@ if __name__=='__main__':
     
 
         rospy.loginfo("Tilt: %f", tilt)
+        rospy.loginfo("Center pixel location: %d %d", cam_cont.center_loc[0], cam_cont.center_loc[1])
         
         cam_cont.get_camera_pose()
 
@@ -528,6 +614,7 @@ if __name__=='__main__':
 
         x = random.uniform(-1, 1)
         y = random.uniform(-1, 1)
+        
         z = random.uniform(0, 1)
 
         origin = Point(x=0, y=0, z=0) 
@@ -541,5 +628,51 @@ if __name__=='__main__':
         #rospy.loginfo("new_pose_q: %f, %f, %f, %f", new_pose_q_arr[0], new_pose_q_arr[1], new_pose_q_arr[2], new_pose_q_arr[3])
         new_pose.orientation = Quaternion(x = new_pose_q_arr[0], y = new_pose_q_arr[1], z = new_pose_q_arr[2], w = new_pose_q_arr[3])
         cam_cont.set_camera_pose(new_pose)
-        cam_cont.pca_img_pub.publish(cam_cont.bridge.cv2_to_imgmsg(cam_cont.pca_img, "bgr8"))
+        cam_cont.orig_img_pub.publish(cam_cont.bridge.cv2_to_imgmsg(cam_cont.orig_img, "bgr8"))
         cam_cont.seg_img_pub.publish(cam_cont.bridge.cv2_to_imgmsg(cam_cont.seg_img, "bgr8"))
+        cam_cont.pca_img_pub.publish(cam_cont.bridge.cv2_to_imgmsg(cam_cont.pca_img, "bgr8"))
+
+        cam_cont.camera_centered = False
+        """
+        while(cam_cont.camera_centered == False):
+            if cam_cont.blob_detected:
+                cam_cont.center_on_pixel()
+                rospy.loginfo("No blobs were detected")
+                rospy.sleep(1)
+            else:
+                cam_cont.camera_centered = True
+                rospy.sleep(1)
+        """
+
+        while(i < 1000):
+            rospy.loginfo("i is %d.", i)
+            if(cam_cont.blob_detected):
+                while(not cam_cont.camera_centered):
+                    cam_cont.center_on_pixel()
+                    cam_cont.orig_img_pub.publish(cam_cont.bridge.cv2_to_imgmsg(cam_cont.orig_img, "bgr8"))
+                    cam_cont.seg_img_pub.publish(cam_cont.bridge.cv2_to_imgmsg(cam_cont.seg_img, "bgr8"))
+                    cam_cont.canny_img_pub.publish(cam_cont.bridge.cv2_to_imgmsg(cam_cont.canny_img, "8UC1"))
+                    cam_cont.pca_img_pub.publish(cam_cont.bridge.cv2_to_imgmsg(cam_cont.pca_img, "bgr8"))
+                    cam_cont.hough_img_pub.publish(cam_cont.bridge.cv2_to_imgmsg(cam_cont.hough_img, "bgr8"))
+
+                # Camera is centered on center of blob
+                curr_pose = cam_cont.model_state.pose
+
+                poses.append(curr_pose)
+                images.append(cam_cont.pca_img)
+                angles.append(cam_cont.blob_angle)
+
+                i += 1
+                #cam_cont.move_camera_in_plane(cam_cont.blob_angle)
+                break
+            else:
+                break
+
+        if(i == 1000):
+            # Save images and poses
+            pickle.dump(poses, open("poses.p", "wb"))
+            pickle.dump(images, open("images.p", "wb"))
+            pickle.dump(angles, open("angles.p", "wb"))
+
+
+

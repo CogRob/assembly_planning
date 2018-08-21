@@ -18,8 +18,7 @@
     <arg name="headless" value="$(arg headless)"/>
   </include>
 
-  <node name="spawn_camera" pkg="gazebo_ros" type="spawn_model" args="-file $(find block_mover)/src/camera_robot.urdf -urdf -x 1 -y 1 -z 1 -model camera_robot"/>
+  <node name="spawn_camera" pkg="gazebo_ros" type="spawn_model" args="-file $(find block_mover)/models/camera_robot.urdf -urdf -x 1 -y 1 -z 0 -model camera_robot"/>
   <node name="spawn_block" pkg="gazebo_ros" type="spawn_model" args="-file $(find lego_gazebo)/models/megabloks1x1_green/model.sdf -sdf -x 0 -y 0 -z 0 -model megablok"/>
-
 
 </launch>
