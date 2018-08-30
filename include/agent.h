@@ -10,18 +10,19 @@ struct AgentState {
   AgentState() : gripper_state(false) {}
   bool gripper_state;
   geometry_msgs::Pose gripper_pose;
-  AgentGoal current_goal;
+  ObjectDesc obj_in_gripper;  // depends on state of gripper
+  PlanGoal current_goal;
 };
 
-struct AgentExpectation {
-  /* data */
-};
-
-// TODO
+// TODO:
 class Agent {
  private:
   /*  data  */
-  AgentExpectation current_expectation;
+  AgentState current_phys_state;
+  struct AgentInternalState {
+    PlanGoal current_goal;
+    Expectation current_expectation;
+  } current_int_state;
   /*  methods */
   // primitive actions
   bool detect();
@@ -34,7 +35,7 @@ class Agent {
 
  public:
   AgentState get_state();
-  AgentExpectation get_expectations();
+  Expectation get_expectations();
   Agent(/* args */);
   ~Agent();
 };
