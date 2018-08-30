@@ -6,23 +6,12 @@
 #include "meta_reasoner.h"
 #include "rule_based_planner.h"
 
-struct AgentState {
-  AgentState() : gripper_state(false) {}
-  bool gripper_state;
-  geometry_msgs::Pose gripper_pose;
-  ObjectDesc obj_in_gripper;  // depends on state of gripper
-  PlanGoal current_goal;
-};
-
 // TODO:
 class Agent {
  private:
   /*  data  */
   AgentState current_phys_state;
-  struct AgentInternalState {
-    PlanGoal current_goal;
-    Expectation current_expectation;
-  } current_int_state;
+  AgentInternalState current_int_state;
   /*  methods */
   // primitive actions
   bool detect();
@@ -31,7 +20,6 @@ class Agent {
   bool transport(ActionConstraints);
   bool pickup();
   bool place();
-  friend class MetaReasoner;
 
  public:
   AgentState get_state();
