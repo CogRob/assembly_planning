@@ -12,6 +12,8 @@ import cv2
 from scipy import ndimage as ndi
 from skimage import feature
 
+import pickle
+
 print(cv2.__version__)
 
 REAL = True
@@ -82,24 +84,197 @@ color_vals = {
     "teal":   (255, 60, 0)
 }
 
+def find_main_lines(orig_img, curr_img, angle_rad_major, angle_rad_minor):
+    # Hough Transform
+    hough_img = orig_img.copy()
+    hough_pixel_acc = 1
+    hough_angle_acc = np.pi / 360
+    hough_min_vote = 10
+    
+    major_angle_thresh = math.pi/16
+    minor_angle_thresh = math.pi/16
+
+    # Standard Hough
+    lines = cv2.HoughLines(curr_img, hough_pixel_acc, hough_angle_acc, hough_min_vote)
+    
+    angles = []
+    num_top = 20
+    major_lines = []
+    minor_lines = []
+    if(lines is not None):
+        for rho, theta in lines[0]:
+            
+            angles.append(theta)
+            a = np.cos(theta)
+            b = np.sin(theta)
+            x0 = a*rho
+            y0 = b*rho
+
+            x1 = int(x0 + 1000*(-b))
+            y1 = int(y0 + 1000*(a))
+            x2 = int(x0 - 1000*(-b))
+            y2 = int(y0 - 1000*(a))
+
+            if(math.fabs(theta - angle_rad_major) < major_angle_thresh and len(major_lines) < num_top):
+                cv2.line(hough_img,(x1,y1),(x2,y2),(0,0,0),1)
+                major_lines.append(((x1,y1), (x2, y2), theta))
+            
+            if(math.fabs(theta - angle_rad_minor) < minor_angle_thresh and len(minor_lines) < num_top):
+                cv2.line(hough_img,(x1,y1),(x2,y2),(0,0,255),1)
+                minor_lines.append(((x1,y1), (x2, y2), theta))
+
+            if(len(major_lines) == num_top and len(minor_lines) == num_top):
+                break
+
+    
+    print("Of the top ", num_top, " lines, ", len(major_lines), " were aligned with major axis and ", len(minor_lines), " were aligned with minor axis.")
+
+    #sorted_angles = sorted(angles)
+    #print(sorted_angles)
+
+    return hough_img, major_lines, minor_lines
+
+
+
+# Lines in ((x1, y1), (x2, y2)) form
+# Corners in list of (x, y) points
+# TODO: Add in the boundaries of bounding box because lines can't intersect outside of bounding box...
+def find_jp(major_lines, minor_lines, corners, jp_img):
+
+    corners = np.array(np.flip(corners, axis=0))
+
+    print(corners.shape)
+
+    #for i in range(corners.shape[1]):
+    #    corner = corners[:, i]
+    #    print("Corner: ", corner)
+    #    cv2.circle(jp_img, tuple(corner), 1, (0, 0, 0))
+
+    plt.imshow(jp_img)
+    plt.show()
+    angle_thresh = math.pi / 8
+
+    distance_to_corner = np.zeros((len(major_lines), len(minor_lines)))
+    closest_corner = np.zeros((len(major_lines), len(minor_lines), 2))
+    intersections = np.zeros((len(major_lines), len(minor_lines), 2))
+    min_distance = 10000000
+
+    for i in range(len(major_lines)):
+        for j in range(len(minor_lines)):
+            major_line = major_lines[i]
+            minor_line = minor_lines[j]
+            # Check if line 1 and 2 are within angle threshold of one another
+            angle1 = major_line[2]
+            angle2 = minor_line[2]
+
+            if(math.fabs(angle1 - angle2) < angle_thresh):
+                print("Angles are not within ", angle_thresh, " of oneanother.")
+                continue
+            
+            
+            # Find intersection 
+            intersection = find_intersection(np.array(major_line[0]), np.array(major_line[1]), np.array(minor_line[0]), np.array(minor_line[1]))
+
+            # Plot for sanity check
+            #cv2.line(jp_img,major_line[0],major_line[1],(0,0,0),1)
+            #cv2.line(jp_img,minor_line[0], minor_line[1],(0,0,255),1)
+
+
+            #cv2.circle(jp_img, tuple(intersection), 10, (0,0, 0), 1)
+            
+            #plt.imshow(jp_img)
+            #plt.show()
+
+            # TODO: Intersection should be within the current bounding box
+            #print("Corners: ", corners)
+            #print("Intersection: ", intersection)
+            #print("Corners - intersection: ", corners - intersection)
+            #print("Distance to corner: ", np.linalg.norm(corners - intersection, axis=0))
+            distance_to_corner[i][j] = np.min(np.linalg.norm(corners - intersection, axis=0))
+            
+            #print(np.argmin(np.fabs(corners - intersection)))
+
+            closest_corner_idx = np.argmin(np.linalg.norm(corners - intersection, axis=0))
+
+            closest_corner[i][j] = corners[:, closest_corner_idx]
+            print("CLOSEST CORNER: ", corners[:, closest_corner_idx], " With index ", closest_corner_idx)
+            intersection = intersection.flatten()
+            intersections[i][j] = intersection
+            
+            distance_to_corner[i][j] = np.linalg.norm(closest_corner[i][j] - intersection)
+
+            if(distance_to_corner[i][j] < min_distance):
+                min_distance = distance_to_corner[i][j]
+                print("New min_distance: ", min_distance)
+
+
+
+    #print(distance_to_corner)
+    best_jp = np.unravel_index(np.argmin(distance_to_corner), distance_to_corner.shape)
+    best_intersection = intersections[best_jp].astype(int)
+    best_corner = closest_corner[best_jp].astype(int)
+
+    print("The minimum distance to a corner is ", distance_to_corner[best_jp])
+    print("The minimum distance to a corner is ", np.min(distance_to_corner))
+    print("The best intersection is ", intersections[best_jp])
+    print("The closest corner is ", closest_corner[best_jp])
+
+    print("Best junction point: ", best_jp)
+    
+    
+    major_line = major_lines[best_jp[0]]
+    minor_line = minor_lines[best_jp[1]]
+
+    print("MAJOR LINE: ", major_line)
+    print("MINOR LINE: ", minor_line)
+
+    cv2.line(jp_img, major_line[0], major_line[1], (0, 0, 255), 1)
+    cv2.line(jp_img, minor_line[0], minor_line[1], (0, 0, 0), 1)
+
+    cv2.circle(jp_img, tuple(best_intersection), 10, (0, 0, 0))
+    cv2.circle(jp_img, tuple(best_corner), 10, (0, 0, 255))
+
+    return jp_img
+
+# From https://stackoverflow.com/questions/3252194/numpy-and-line-intersections
+def perp(a): 
+    b = np.empty_like(a)
+    b[0] = -a[1]
+    b[1] = a[0]
+    return b
+
+
+    # From https://stackoverflow.com/questions/3252194/numpy-and-line-intersections
+def find_intersection(a1, a2, b1, b2):
+    da = a2 - a1
+    db = b2 - b1
+    dp = a1 - b1
+    dap = perp(da)
+
+    denom = np.dot(dap, db)
+    num = np.dot(dap, dp)
+
+    intersection =  (num / denom.astype(float))*db + b1
+    
+    return np.reshape(intersection, (2,1))
+
+
 # Loading Image
 images = []
 
 
-cap = cv2.VideoCapture('../images/block_video.MOV')
 current_frame = 0
 
-while(True):
-    ret, frame = cap.read()
+images = pickle.load(open("images.p", "rb"))
 
-    current_frame += 1
+for i in range(0, 10):
+    # For reading real images
+    img = cv2.imread("../images/green_block_" + str(i) + ".jpg", cv2.IMREAD_COLOR)
+    #img = frame
 
-    if(not current_frame%4 == 1):
-        continue
+    # For reading in simulated images
+    #img = images[i]
 
-#for i in range(0, 10):
-    #img_1 = cv2.imread("../images/green_block_" + str(i) + ".jpg", cv2.IMREAD_COLOR)
-    img = frame
 
     #aspect_ratio = img.shape[0] / img.shape[1]
     newsize = (1280, 800)
@@ -159,9 +334,13 @@ while(True):
         min_area_mask = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         min_area_mask.fill(0)
         
+        contour_img = orig_img.copy()
+        cv2.drawContours(contour_img, contours, -1, (0,255,0), 3)
 
+        print("There are ", len(contours), " contours.")
         for c in contours:
             area = cv2.contourArea(c)
+
             if(area > 2000):
                 large_contours.append(c)
 
@@ -176,10 +355,14 @@ while(True):
 
                 # Bounding Rectangle
                 x, y, w, h = cv2.boundingRect(c)
-                cv2.rectangle(rect_img, (x, y), (x+w, y+h), color_vals[color], 2)
+                cv2.rectangle(rect_img, (x - 5, y-5), (x+ w + 5, y + h + 5), color_vals[color], 2)
+                #cv2.rectangle(rect_img, (x, y), (x+ w, y + h), color_vals[color], 2)
 
-                img = img[y:y+h, x:x+w]
-                erode_cropped = erode_1[y:y+h, x:x+w]
+                img = img[y-5:y+h+5, x-5:x+w+5]
+                erode_cropped = erode_1[y-5:y+h+5, x-5:x+w+5]
+                
+                #img = img[y:y+h, x:x+w]
+                #erode_cropped = erode_1[y:y+h, x:x+w]
 
                 break
 
@@ -193,7 +376,7 @@ while(True):
     canny_img = 255 - canny_img
     #canny_img = np.logical_not(canny_img)
     """
-    gray_blur = cv2.medianBlur(gray, 7)
+    gray_blur = cv2.medianBlur(gray, 3)
     canny_img = feature.canny(gray_blur, sigma=1)
     canny_img = canny_img.astype(np.uint8)
 
@@ -210,11 +393,27 @@ while(True):
 
     #canny_img = cv2.dilate(canny_img, np.ones((2,2), np.uint8), iterations=1)
     #canny_img = cv2.erode(canny_img, np.ones((2,2), np.uint8), iterations=1)
+   
+   
+    blur_img = cv2.GaussianBlur(gray, (1, 1), 0)
+    lap_img = cv2.Laplacian(blur_img, cv2.CV_64F)
 
+    h, w = lap_img.shape
+    edge_thresh = 20
+    for col in range(w):
+        for row in range(h):
+            #print(lap_img[row, col])
+
+            if math.fabs(lap_img[row, col]) > edge_thresh:
+                lap_img[row, col] = 1
+            else:
+                lap_img[row,col] = 0
 
     # PCA
     pca_img = img.copy()
     h, w = gray.shape
+
+    print("Height: ", h, " Width: ", w)
 
     #From a matrix of pixels to a matrix of coordinates of non-black points.
     #(note: mind the col/row order, pixels are accessed as [row, col]
@@ -258,100 +457,102 @@ while(True):
 
     angle = 180 - (angle_rad_major * 180 / np.pi) % 180
 
-
-    # Hough Transform
-    """
-    hough_img = img.copy()
-
-    # Standard Hough
-    lines = cv2.HoughLines(canny_img,2,np.pi/720,20)
-    angles = []
-
-    if(lines is not None):
-        print("There are " + str(len(lines[0])) + " lines")
-        for rho, theta in lines[0][:100]:
-            
-            angles.append(theta)
-            a = np.cos(theta)
-            b = np.sin(theta)
-            x0 = a*rho
-            y0 = b*rho
-            #print("Image ", i, " has theta ", theta, " and rho ", rho)
-            x1 = int(x0 + 1000*(-b))
-            y1 = int(y0 + 1000*(a))
-            x2 = int(x0 - 1000*(-b))
-            y2 = int(y0 - 1000*(a))
-            if(math.fabs(theta - angle_rad_major) < math.pi/132):
-                cv2.line(hough_img,(x1,y1),(x2,y2),(0,0,0),1)
-            
-            if(math.fabs(theta - angle_rad_minor) < math.pi/132):
-                cv2.line(hough_img,(x1,y1),(x2,y2),(0,0,255),1)
-
-    sorted_angles = sorted(angles)
-    print(sorted_angles)
-    """
-    
-
-    # Probabilistic Hough
-    """
-    minLineLength = 20
-    maxLineGap = 2
-    lines = cv2.HoughLinesP(canny_img,1,np.pi/180,10,maxLineGap,minLineLength)
-    hough_p_img = img.copy()
-    if(lines is not None):
-        for x1,y1,x2,y2 in lines[0]:
-            cv2.line(hough_p_img,(x1,y1),(x2,y2),(0,0,0),1)
-    """
-
-    """
+    # Corner detection
     harris_img = gray.copy()
+    harris_block_size = 5
+    harris_ksize = 3
+    harris_k = 0.04
+    
     # Find Corners
-    dst = cv2.cornerHarris(harris_img,2,3,0.04)
+    dst = cv2.cornerHarris(harris_img,harris_block_size,harris_ksize,harris_k)
 
     #result is dilated for marking the corners, not important
     dst = cv2.dilate(dst,None)
 
     # Threshold for an optimal value, it may vary depending on the image.
-    harris_img[dst>0.001*dst.max()]=0
+    harris_img[dst>0.001*dst.max()] = 2
+    corners = np.where(harris_img == 2)
 
+
+
+    canny_hough_img, major_lines, minor_lines = find_main_lines(img, canny_img, angle_rad_major, angle_rad_minor)
+
+    jp_img_1 = find_jp(major_lines, minor_lines, corners, img.copy())
+    
+    lap_img = lap_img.astype(np.uint8)
+
+    lap_hough_img, major_lines, minor_lines = find_main_lines(img, lap_img, angle_rad_major, angle_rad_minor)
+
+    jp_img_2 = find_jp(major_lines, minor_lines, corners, img.copy())
+    # Probabilistic Hough
+    minLineLength = 20
+    maxLineGap = 1
+    hough_p_pixel_acc = 1
+    hough_p_angle_acc = np.pi/360
+
+    lines = cv2.HoughLinesP(canny_img, hough_p_pixel_acc, hough_p_angle_acc, 10, maxLineGap, minLineLength)
+    hough_p_img = img.copy()
+    if(lines is not None):
+        for x1,y1,x2,y2 in lines[0]:
+            cv2.line(hough_p_img,(x1,y1),(x2,y2),(0,0,0),1)
+            
     brisk = cv2.BRISK()
     kp_brisk = brisk.detect(gray)
     brisk_img = img.copy()
 
     brisk_img = cv2.drawKeypoints(img, kp_brisk, brisk_img)
-    """
 
 
+  
+    plt.subplot("341")
+    plt.imshow(orig_img,cmap='gray')
+    plt.title("Original Image")
 
-    
-    """
-    plt.subplot("231")
     plt.imshow(rect_img,cmap='gray')
     plt.title("HSV Thresholded Image")
-    plt.subplot("232")
+
+    plt.subplot("342")
     plt.imshow(canny_img,cmap='gray')
     plt.title("Canny Image")
-    plt.subplot("233")
+    plt.subplot("343")
     plt.imshow(harris_img,cmap='gray')
     plt.title("Harris Image")
-    plt.subplot("234")
-    plt.imshow(hough_img,cmap='gray'
-    plt.title("Hough Image")
-    plt.subplot("235")
+    plt.subplot("344")
+    plt.imshow(canny_hough_img,cmap='gray')
+    plt.title("Canny Hough Image")
+    plt.subplot("345")
     plt.imshow(hough_p_img,cmap='gray')
     plt.title("Probabilistic Hough Image")
-    plt.subplot("236")
+    plt.subplot("346")
     plt.imshow(brisk_img,cmap='gray')
     plt.title("Brisk Image")
+    plt.subplot("347")
+    plt.imshow(lap_img,cmap='gray')
+    plt.title("Laplacian Image")
+    plt.subplot("348")
+    plt.imshow(pca_img,cmap='gray')
+    plt.title("PCA Image")
+    plt.subplot("349")
+    plt.imshow(lap_hough_img,cmap='gray')
+    plt.title("Hough Laplacian Image")
+    plt.subplot(3, 4, 10)
+    plt.imshow(jp_img_1,cmap='gray')
+    plt.title("Junction Point Image (Canny)")
+    plt.subplot(3, 4, 11)
+    plt.imshow(jp_img_2,cmap='gray')
+    plt.title("Junction Point Image (Laplacian)")
     plt.suptitle("Image " + str(i))
     plt.show()
+    
+    
     """
     cv2.namedWindow("Axes", cv2.WND_PROP_FULLSCREEN)          
     cv2.setWindowProperty("Axes", cv2.WND_PROP_FULLSCREEN, cv2.cv.CV_WINDOW_FULLSCREEN)
-       
-    cv2.imshow("Axes", pca_img)
+      
+    cv2.imshow("Axes", lap_img)
 
     cv2.waitKey(1)
+    """
 
 
     """

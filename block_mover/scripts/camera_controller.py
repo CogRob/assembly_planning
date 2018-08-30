@@ -12,6 +12,7 @@ import numpy as np
 import cv2
 from skimage import feature
 import pickle
+from matplotlib import pyplot as plt
 
 from cv_bridge import CvBridge
 
@@ -264,7 +265,10 @@ class CameraController():
         if(x_centered == True and y_centered == True):
             self.camera_centered = True
             self.pixel_loc = np.zeros(2)
-            
+
+    def find_object_axes(self, img):
+        
+
 
 
     '''
@@ -354,6 +358,7 @@ class CameraController():
                     cropped_h = x
 
                     break
+                      
                 else:
                     rospy.loginfo("No contour with area larger than %d was found.", contour_area_thresh)
                     self.blob_detected = False
@@ -362,7 +367,7 @@ class CameraController():
 
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             
-            # Canny Edge Detection
+            # Canny Edge Detectionz
             canny_min_thresh = 10
             canny_max_thresh = 300
             canny_img = cv2.Canny(gray, canny_min_thresh, canny_max_thresh, apertureSize = 5)
@@ -564,102 +569,120 @@ def info_callback(self):
 
 
 def plot_results():
-    images = pickle.load("images.p")
-    poses = pickle.load("poses.p")
-    angles = pickle.load("angles.p")
+    images = pickle.load(open("images.p", "rb"))
+    poses = pickle.load(open("poses.p", "rb"))
+    angles = pickle.load(open("angles.p", "rb"))
+    for angle in angles:
+        angle = angle%90
 
-    for i in range(len(images)):
-        curr_img = images[i]
-        curr_pose = poses[i]
-        curr_angle = angles[i]
+    # Sort all data by angles
+    sorted_idxs = np.argsort(angles)
+
+
+    for idx in sorted_idxs[::-1]:
+        curr_img = images[idx]
+        curr_pose = poses[idx]
+        curr_angle = angles[idx]
+        print("Current angle: ", curr_angle)
+        print("Current_pose: ", curr_pose)
+        plt.imshow(curr_img)
+        plt.show()
+        
+
+
 
 
 
 if __name__=='__main__':
-    rospy.init_node('camera_controller')
-    cam_cont = CameraController()
 
-    cam_cont.reset_camera_pose()
-    cam_cont.publish()
-    cam_cont.subscribe()
-    cam_cont.subscribe()
-    radius = 1
-    tilt = 0.0
-    divisor = 16
-    curr_step = 0
+    run_camera_controller = False
+
+    if(run_camera_controller): 
+        rospy.init_node('camera_controller')
+        cam_cont = CameraController()
+
+        cam_cont.reset_camera_pose()
+        cam_cont.publish()
+        cam_cont.subscribe()
+        cam_cont.subscribe()
+        radius = 1
+        tilt = 0.0
+        divisor = 16
+        curr_step = 0
 
 
-    poses = []
-    images = []
-    angles = []
-    i = 0
+        poses = []
+        images = []
+        angles = []
+        i = 0
 
-    while not rospy.is_shutdown():
-        # Move to random location
-        if(curr_step%divisor == 0):
-            tilt += 0.1
+        while not rospy.is_shutdown():
+            # Move to random location
+            if(curr_step%divisor == 0):
+                tilt += 0.1
 
-        angle = curr_step * 2 * math.pi / divisor
-        curr_step += 1
-    
-
-        rospy.loginfo("Tilt: %f", tilt)
-        rospy.loginfo("Center pixel location: %d %d", cam_cont.center_loc[0], cam_cont.center_loc[1])
+            angle = curr_step * 2 * math.pi / divisor
+            curr_step += 1
         
-        cam_cont.get_camera_pose()
 
-        curr_pose = cam_cont.model_state.pose
+            rospy.loginfo("Tilt: %f", tilt)
+            rospy.loginfo("Center pixel location: %d %d", cam_cont.center_loc[0], cam_cont.center_loc[1])
+            
+            cam_cont.get_camera_pose()
 
-        new_pose = Pose()
+            curr_pose = cam_cont.model_state.pose
 
-        x = random.uniform(-1, 1)
-        y = random.uniform(-1, 1)
-        
-        z = random.uniform(0, 1)
+            new_pose = Pose()
 
-        origin = Point(x=0, y=0, z=0) 
+            x = random.uniform(-1, 1)
+            y = random.uniform(-1, 1)
+            
+            z = random.uniform(0, 1)
 
-        new_pose.position.x = origin.x + x
-        new_pose.position.y = origin.y + y
-        new_pose.position.z = origin.z + z
+            origin = Point(x=0, y=0, z=0) 
 
-        #rospy.loginfo("x: %f, y: %f, z: %f", x, y, z)
-        new_pose_q_arr = tf.transformations.quaternion_from_euler(0, math.atan2(z, math.sqrt(x*x + y*y)), math.atan2(-y, -x))
-        #rospy.loginfo("new_pose_q: %f, %f, %f, %f", new_pose_q_arr[0], new_pose_q_arr[1], new_pose_q_arr[2], new_pose_q_arr[3])
-        new_pose.orientation = Quaternion(x = new_pose_q_arr[0], y = new_pose_q_arr[1], z = new_pose_q_arr[2], w = new_pose_q_arr[3])
-        cam_cont.set_camera_pose(new_pose)
-        cam_cont.orig_img_pub.publish(cam_cont.bridge.cv2_to_imgmsg(cam_cont.orig_img, "bgr8"))
-        cam_cont.seg_img_pub.publish(cam_cont.bridge.cv2_to_imgmsg(cam_cont.seg_img, "bgr8"))
-        cam_cont.pca_img_pub.publish(cam_cont.bridge.cv2_to_imgmsg(cam_cont.pca_img, "bgr8"))
+            new_pose.position.x = origin.x + x
+            new_pose.position.y = origin.y + y
+            new_pose.position.z = origin.z + z
 
-        cam_cont.camera_centered = False
-        """
-        while(cam_cont.camera_centered == False):
-            if cam_cont.blob_detected:
-                cam_cont.center_on_pixel()
-                rospy.loginfo("No blobs were detected")
-                rospy.sleep(1)
-            else:
-                cam_cont.camera_centered = True
-                rospy.sleep(1)
-        """
+            #rospy.loginfo("x: %f, y: %f, z: %f", x, y, z)
+            new_pose_q_arr = tf.transformations.quaternion_from_euler(0, math.atan2(z, math.sqrt(x*x + y*y)), math.atan2(-y, -x))
+            #rospy.loginfo("new_pose_q: %f, %f, %f, %f", new_pose_q_arr[0], new_pose_q_arr[1], new_pose_q_arr[2], new_pose_q_arr[3])
+            new_pose.orientation = Quaternion(x = new_pose_q_arr[0], y = new_pose_q_arr[1], z = new_pose_q_arr[2], w = new_pose_q_arr[3])
+            
+            cam_cont.set_camera_pose(new_pose)
+            cam_cont.orig_img_pub.publish(cam_cont.bridge.cv2_to_imgmsg(cam_cont.orig_img, "bgr8"))
+            cam_cont.seg_img_pub.publish(cam_cont.bridge.cv2_to_imgmsg(cam_cont.seg_img, "bgr8"))
+            cam_cont.pca_img_pub.publish(cam_cont.bridge.cv2_to_imgmsg(cam_cont.pca_img, "bgr8"))
 
-        while(i < 1000):
-            rospy.loginfo("i is %d.", i)
-            if(cam_cont.blob_detected):
-                while(not cam_cont.camera_centered):
+            cam_cont.camera_centered = False
+            """
+            while(cam_cont.camera_centered == False):
+                if cam_cont.blob_detected:
                     cam_cont.center_on_pixel()
-                    cam_cont.orig_img_pub.publish(cam_cont.bridge.cv2_to_imgmsg(cam_cont.orig_img, "bgr8"))
-                    cam_cont.seg_img_pub.publish(cam_cont.bridge.cv2_to_imgmsg(cam_cont.seg_img, "bgr8"))
-                    cam_cont.canny_img_pub.publish(cam_cont.bridge.cv2_to_imgmsg(cam_cont.canny_img, "8UC1"))
-                    cam_cont.pca_img_pub.publish(cam_cont.bridge.cv2_to_imgmsg(cam_cont.pca_img, "bgr8"))
-                    cam_cont.hough_img_pub.publish(cam_cont.bridge.cv2_to_imgmsg(cam_cont.hough_img, "bgr8"))
+                    rospy.loginfo("No blobs were detected")
+                    rospy.sleep(1)
+                else:
+                    cam_cont.camera_centered = True
+                    rospy.sleep(1)
+            """
+
+            while(i < 10):
+                rospy.loginfo("i is %d.", i)
+                if(cam_cont.blob_detected):
+                    while(not cam_cont.camera_centered):
+                        cam_cont.center_on_pixel()
+                        cam_cont.orig_img_pub.publish(cam_cont.bridge.cv2_to_imgmsg(cam_cont.orig_img, "bgr8"))
+                        cam_cont.seg_img_pub.publish(cam_cont.bridge.cv2_to_imgmsg(cam_cont.seg_img, "bgr8"))
+                        cam_cont.canny_img_pub.publish(cam_cont.bridge.cv2_to_imgmsg(cam_cont.canny_img, "8UC1"))
+                        cam_cont.pca_img_pub.publish(cam_cont.bridge.cv2_to_imgmsg(cam_cont.pca_img, "bgr8"))
+                        cam_cont.hough_img_pub.publish(cam_cont.bridge.cv2_to_imgmsg(cam_cont.hough_img, "bgr8"))
 
                 # Camera is centered on center of blob
                 curr_pose = cam_cont.model_state.pose
 
                 poses.append(curr_pose)
-                images.append(cam_cont.pca_img)
+                images.append(cam_cont.orig_img)
                 angles.append(cam_cont.blob_angle)
 
                 i += 1
@@ -668,11 +691,16 @@ if __name__=='__main__':
             else:
                 break
 
-        if(i == 1000):
+        if(i == 10):
+            print("SAVING!!!!")
             # Save images and poses
             pickle.dump(poses, open("poses.p", "wb"))
             pickle.dump(images, open("images.p", "wb"))
             pickle.dump(angles, open("angles.p", "wb"))
+
+    else:
+        plot_results()
+
 
 
 
