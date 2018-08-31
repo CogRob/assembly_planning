@@ -10,21 +10,27 @@
 #include <unordered_map>
 
 // environment-specific constants
-enum ObjectOccupancy { INVENTORY, WORKSPACE, UNKNOWN };
-enum ObjectColor { RED, GREEN, BLUE, YELLOW, GREY };
+enum class ObjectOccupancy { INVENTORY, WORKSPACE, UNKNOWN };
+enum class ObjectColor { RED, GREEN, BLUE, YELLOW, GREY };
 
 // planner-specific constants
-enum PrimitiveActions { DETECT, ALIGN, TRANSPORT, RETRACT, PICKUP, PLACE };
-enum ConstraintType { POSE, OBJECT, BOTH, NONE };
-enum PlanStatus { COMPLETE, PARTIAL, UNKNOWN };
+enum class PrimitiveActions {
+  DETECT,
+  ALIGN,
+  TRANSPORT,
+  RETRACT,
+  PICKUP,
+  PLACE
+};
+enum class ConstraintType { POSE, OBJECT, BOTH, NONE };
+enum class PlanStatus { COMPLETE, PARTIAL, UNKNOWN };
 
-// environment description data structures
-struct EnvState {
-  std::unordered_map<ObjectType, std::vector<ObjectInstance>> object_list;
-  std::set<ObjectType> workspace, inventory;
-  // TODO: write a comparison where keys are compared and if all keys exist then
+// meta-reasoner data structures
+struct Expectation {
+  /* data */
 };
 
+// environment description data structures
 struct ObjectType {
   ObjectType() : length(0), width(0), color(ObjectColor::GREY) {}
   unsigned int length;
@@ -32,14 +38,14 @@ struct ObjectType {
   ObjectColor color;
 
   bool operator==(const ObjectType& rhs) const {
-    return ((length == rhs.length) & (width == rhs.width) &
+    return ((length == rhs.length) && (width == rhs.width) &&
             (color == rhs.color));
   }
   bool operator<(const ObjectType& rhs) const {
     return (width < rhs.width) ||
-           (!(width < rhs.width) && (length < rhs.length)) &&
-               (!(width < rhs.width) && !(length < rhs.length) &&
-                (color < rhs.color));
+           (!(width < rhs.width) && (length < rhs.length)) ||
+           (!(width < rhs.width) && !(length < rhs.length) &&
+            (color < rhs.color));
   }
 };
 
@@ -57,6 +63,27 @@ struct ObjectInstance {
     return (this->location == rhs.location);
   }
 };
+
+struct ActionConstraints {
+  ConstraintType type;
+  geometry_msgs::Pose2D goal_pose;  // in the table's local frame of reference
+  // environment goal pose is converted to world/agent's frame by the
+  // lower-level motion planner TODO: in agent.cc
+  ObjectType goal_object;
+};
+
+struct PlanGoal {
+  PrimitiveActions action;
+  ActionConstraints env_constraint;
+};
+
+// struct EnvState {
+//   std::unordered_map<ObjectType, std::vector<ObjectInstance>> object_list;
+//   std::set<ObjectType> workspace, inventory;
+//   // TODO: write a comparison where keys are compared and if all keys exist
+//   then
+// };
+
 struct AgentState {
   AgentState() : gripper_state(false) {}
   bool gripper_state;
@@ -73,35 +100,16 @@ struct AgentState {
   }
 };
 
+// struct PreConditions {
+//   // we assume all pre-conditions are at the abstract level of objects
+//   // and not at the scope of world pose <--> object relationships
+//   EnvState env_pc;
+//   AgentState agent_pc;
+// };
+
 struct AgentInternalState {
   PlanGoal current_goal;
   Expectation current_expectation;
-};
-
-// planner data structures
-struct ActionConstraints {
-  ConstraintType type;
-  geometry_msgs::Pose2D goal_pose;  // in the table's local frame of reference
-  // environment goal pose is converted to world/agent's frame by the
-  // lower-level motion planner TODO: in agent.cc
-  ObjectType goal_object;
-};
-
-struct PlanGoal {
-  PrimitiveActions action;
-  ActionConstraints env_constraint;
-};
-
-struct PreConditions {
-  // we assume all pre-conditions are at the abstract level of objects
-  // and not at the scope of world pose <--> object relationships
-  EnvState env_pc;
-  AgentState agent_pc;
-};
-
-// meta-reasoner data structures
-struct Expectation {
-  /* data */
 };
 
 #endif /* LEGO_WORLD_H */
