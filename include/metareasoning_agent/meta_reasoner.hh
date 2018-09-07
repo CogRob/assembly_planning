@@ -1,7 +1,7 @@
 #ifndef META_REASONER_h
 #define META_REASONER_h
 
-#include "lego_world.h"
+#include "lego_world.hh"
 
 class MetaReasoner {
  private:

@@ -4,8 +4,8 @@
 #include <iostream>
 #include <string>
 #include <vector>
-#include "lego_world.h"
-#include "meta_reasoner.h"
+#include "lego_world.hh"
+#include "meta_reasoner.hh"
 
 class RulePlanner {
  private:
