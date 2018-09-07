@@ -25,13 +25,14 @@ import baxter_interface
 
 import tf
 
-REAL = True
+TOP_CAM = False
+HAND_CAM = True
 SIM  = False
 
 
 TUNE_HSV_VALS = False
 
-if(REAL):
+if(TOP_CAM):
     BLU_LOW_HUE     = 106
     BLU_HIGH_HUE    = 115
     BLU_LOW_SAT     = 160
@@ -68,6 +69,45 @@ if(REAL):
     YEL_HIGH_SAT    = 255
     YEL_LOW_VAL     = 182
     YEL_HIGH_VAL    = 255
+
+if(HAND_CAM):
+    BLU_LOW_HUE     = 100
+    BLU_HIGH_HUE    = 133
+    BLU_LOW_SAT     = 117
+    BLU_HIGH_SAT    = 255
+    BLU_LOW_VAL     = 28
+    BLU_HIGH_VAL    = 255
+
+    GRN_LOW_HUE     = 37
+    GRN_HIGH_HUE    = 104
+    GRN_LOW_SAT     = 60
+    GRN_HIGH_SAT    = 199
+    GRN_LOW_VAL     = 10
+    GRN_HIGH_VAL    = 255
+
+    TEAL_LOW_HUE     = 90
+    TEAL_HIGH_HUE    = 104
+    TEAL_LOW_SAT     = 97
+    TEAL_HIGH_SAT    = 201
+    TEAL_LOW_VAL     = 42
+    TEAL_HIGH_VAL    = 255
+
+    RED_LOW_HUE_1     = 0
+    RED_HIGH_HUE_1    = 10
+    RED_LOW_HUE_2     = 160
+    RED_HIGH_HUE_2    = 180
+    RED_LOW_SAT     = 5
+    RED_HIGH_SAT    = 255
+    RED_LOW_VAL     = 20
+    RED_HIGH_VAL    = 255
+
+    YEL_LOW_HUE     = 10
+    YEL_HIGH_HUE    = 70
+    YEL_LOW_SAT     = 33
+    YEL_HIGH_SAT    = 255
+    YEL_LOW_VAL     = 182
+    YEL_HIGH_VAL    = 255
+
 
 if(SIM):
     BLU_LOW_HUE     = 90
@@ -113,18 +153,18 @@ colors = {
         "red":      {   "low_h": [RED_LOW_HUE_1, RED_LOW_HUE_2],   "high_h": [RED_HIGH_HUE_1, RED_HIGH_HUE_2],
                         "low_s": RED_LOW_SAT,   "high_s": RED_HIGH_SAT,
                         "low_v": RED_LOW_VAL,   "high_v": RED_HIGH_VAL  },
-        "yellow":   {   "low_h": YEL_LOW_HUE,   "high_h": YEL_HIGH_HUE,
-                        "low_s": YEL_LOW_SAT,   "high_s": YEL_HIGH_SAT,
-                        "low_v": YEL_LOW_VAL,   "high_v": YEL_HIGH_VAL  },
+        #"yellow":   {   "low_h": YEL_LOW_HUE,   "high_h": YEL_HIGH_HUE,
+        #                "low_s": YEL_LOW_SAT,   "high_s": YEL_HIGH_SAT,
+        #                "low_v": YEL_LOW_VAL,   "high_v": YEL_HIGH_VAL  },
         "green":    {   "low_h": GRN_LOW_HUE,   "high_h": GRN_HIGH_HUE,
                         "low_s": GRN_LOW_SAT,   "high_s": GRN_HIGH_SAT,
                         "low_v": GRN_LOW_VAL,   "high_v": GRN_HIGH_VAL  },
         "blue":     {   "low_h": BLU_LOW_HUE,   "high_h": BLU_HIGH_HUE,
                         "low_s": BLU_LOW_SAT,   "high_s": BLU_HIGH_SAT,
                         "low_v": BLU_LOW_VAL,   "high_v": BLU_HIGH_VAL  },
-        "teal":     {   "low_h": TEAL_LOW_HUE,  "high_h": TEAL_HIGH_HUE,
-                        "low_s": TEAL_LOW_SAT,  "high_s": TEAL_HIGH_SAT,
-                        "low_v": TEAL_LOW_VAL,  "high_v": TEAL_HIGH_VAL  }
+        #"teal":     {   "low_h": TEAL_LOW_HUE,  "high_h": TEAL_HIGH_HUE,
+        #                "low_s": TEAL_LOW_SAT,  "high_s": TEAL_HIGH_SAT,
+        #                "low_v": TEAL_LOW_VAL,  "high_v": TEAL_HIGH_VAL  }
 }
 
 color_vals = {
@@ -215,6 +255,7 @@ class BlockFinder():
 
         self.block_poses = []
         self.markers = MarkerArray()
+        self.ray_markers = MarkerArray()
         self.tf_listener = tf.TransformListener()
         self.top_camera_model = None
         self.hand_camera_model = None
@@ -232,8 +273,10 @@ class BlockFinder():
             }
         self.rect_seg_img = np.zeros((800,800,3), dtype=np.uint8)
 
-        self.ray_marker = None
         self.pixel_loc = None
+
+        # TODO: Tune!
+        self.top_cam_table_dist = 1.33
 
     def publish(self):
         self.pose_pub           = rospy.Publisher("block_finder/" + self.limb + "/block_poses", PoseArray, queue_size=1)
@@ -244,29 +287,41 @@ class BlockFinder():
         self.green_seg_img_pub  = rospy.Publisher("block_finder/" + self.limb + "/green_segmented_image", Image, queue_size=1)
         self.rect_seg_img_pub   = rospy.Publisher("block_finder/" + self.limb + "/rect_segmented_image", Image, queue_size=1)
         self.marker_pub         = rospy.Publisher("block_finder/" + self.limb + "/block_markers", MarkerArray, queue_size=1)
-        self.ray_marker_pub     = rospy.Publisher("block_finder/image_ray", Marker, queue_size=1)
+        self.ray_marker_pub     = rospy.Publisher("block_finder/image_rays", MarkerArray, queue_size=20)
 
     def subscribe(self):
         # The camera in left or right hand
         self.hand_cam_sub   = rospy.Subscriber("/cameras/" + self.limb + "_camera/image", Image, self.hand_cam_callback)
 
         # The camera above the table
-        self.top_cam_sub    = rospy.Subscriber("/camera/rgb/image_rect_color", Image, self.top_cam_callback)
-        self.hand_cam_info_sub       = rospy.Subscriber("/cameras/" + self.limb + "_camera/camera_info", CameraInfo, self.hand_cam_info_callback)
-        self.top_cam_info_sub       = rospy.Subscriber("/camera/rgb/camera_info", CameraInfo, self.top_cam_info_callback)
+        #self.top_cam_sub    = rospy.Subscriber("/camera/rgb/image_rect_color", Image, self.top_cam_callback)
+        self.hand_cam_info_sub       = rospy.Subscriber("/cameras/" + self.limb + "_camera/camera_info_std", CameraInfo, self.hand_cam_info_callback)
+        #self.top_cam_info_sub       = rospy.Subscriber("/camera/rgb/camera_info", CameraInfo, self.top_cam_info_callback)
         self.ir_sub         = rospy.Subscriber("/robot/range/" + self.limb + "_range/state", Range, self.ir_callback)
         
+
+    def hand_cam_callback(self, data):
+        cv_image = self.bridge.imgmsg_to_cv2(data)
+
+        self.find_blocks(cv_image, camera_name="right_hand")
+    
+    def top_cam_callback(self, data):
+        cv_image = self.bridge.imgmsg_to_cv2(data)
+
+        self.find_blocks(cv_image, camera_name="top")
 
     '''
     Thresholds camera image and stores object centroid location (x,y) in Baxter's base frame.
     '''
-    def hand_cam_callback(self, data):
-        
-        cv_image = self.bridge.imgmsg_to_cv2(data)
-
+    def find_blocks(self, cv_image, camera_name):
         block_pose_list = []
-        marker_list = MarkerArray()
+        block_marker_list = MarkerArray()
+        ray_marker_list = MarkerArray()
+        
+        # Mask cv_image to remove baxter's grippers
 
+        if(TUNE_HSV_VALS):
+            find_hsv_values(cv_image)
 
         height, width, depth = cv_image.shape
         low_s = 0
@@ -276,7 +331,9 @@ class BlockFinder():
 
         images = [hsv, hsv, hsv, hsv, hsv]
         i = 0
+        ray_id = 0
 
+        # Find table
 
         for color in colors:
             low_h = colors[color]["low_h"]
@@ -293,12 +350,14 @@ class BlockFinder():
 
                 hsv_mask = hsv_mask_1 | hsv_mask_2
 
-                # Apply mask to original image
 
             else:
                 hsv_mask = cv2.inRange(hsv, np.array([low_h, low_s, low_v]), np.array([high_h, high_s, high_v]))
 
+            # Apply mask to original image
             masked_img = cv2.bitwise_and(cv_image, cv_image, mask=hsv_mask)
+
+            # Store HSV masked image for the current color
             self.seg_img[color] = masked_img.copy()
             #cv2.imshow(color, masked_img)
 
@@ -318,34 +377,34 @@ class BlockFinder():
 
             #Draw the countours.
             #cv2.drawContours(cv_image, contours, -1, (0,255,0), 3)
-            large_contours = []
-
             
-            for c in contours:
-                area = cv2.contourArea(c)
-                if(area > 1000):
-                    large_contours.append(c)
+            num_obj = len(contours) # number of objects found in current frame
+
+            for contour in contours:
+                area = cv2.contourArea(contour)
+                
+                if(area*self.ir_reading > 180):
                     
                     rospy.loginfo("AREA: %f", area)
-                    rect = cv2.minAreaRect(c)
+                    rect = cv2.minAreaRect(contour)
+                    print(rect[1][0])
+                    print(rect[1][1])
                     box = cv2.cv.BoxPoints(rect)
                     box = np.int0(box)
                     cv2.drawContours(cv_image, [box], 0, color_vals[color] , 2)
 
-                
 
-                #angle = calc_center_angle(c, cv_image)
+                    x, y, w, h = cv2.boundingRect(contour)
+                    cropped_img = masked_img[y-5:y+h+5, x-5:x+w+5]
 
-                #cv2.rectangle(cv_image, (x, y), (x+w, y+h), (0, 255, 0), 2)
+                    block_angle = calc_angle(cropped_img)
+                    block_ratio = calc_ratio(box[1][1], box[1][0])
 
+                    block_type = calc_block_type(block_ratio)
 
-            numobj = len(contours) # number of objects found in current frame
-
-            if numobj > 0:
-                for contour in large_contours:
                     moms = cv2.moments(contour)
 
-                    if moms['m00']>500:
+                    if moms['m00']*self.ir_reading > 180:
                         cx = int(moms['m10']/moms['m00'])
                         cy = int(moms['m01']/moms['m00'])
 
@@ -357,21 +416,33 @@ class BlockFinder():
 
                         cv2.circle(cv_image,(cx,cy), 10, color_vals[color], 1)
 
+                        # Write the block tshape
+                        font = cv2.FONT_HERSHEY_SIMPLEX
+                        cv2.putText(cv_image,block_type,(cx,cy), font, 4,(255,255,255),2)
+
                         self.pixel_loc = [cx, cy]
                         
 
 
-                        rospy.loginfo("Found %d %s objects", numobj, color)
+                        rospy.loginfo("Found %d %s objects", num_obj, color)
                         obj_found = True
+                        if(camera_name == "right_hand"):
+                            vec = np.array(self.hand_camera_model.projectPixelTo3dRay((cx, cy)))
+                        elif(camera_name == "top"):
+                            vec = np.array(self.top_camera_model.projectPixelTo3dRay((cx, cy)))
+                        else:
+                            # Invalid camera name
+                            rospy.loginfo("The camera name you passed to find blocks is invalid!")
+                            return
 
-                        cam_info = rospy.wait_for_message("/cameras/"+ self.limb + "_camera" + "/camera_info", CameraInfo, timeout=None)
-
-                        
-                        vec = np.array(self.hand_camera_model.projectPixelTo3dRay((cx, cy)))
 
                         if(self.ir_reading != None):
-                            #rospy.loginfo("IR reading is: %f", self.ir_reading)
-                            d = self.ir_reading# - self.object_height / 2
+                            rospy.loginfo("IR reading is: %f", self.ir_reading)
+                            if(camera_name =="right_hand"):
+                                d = self.ir_reading + 0.15
+                            elif(camera_name =="top"):
+                                d = self.top_cam_table_dist
+                            #d = 0.55
 
                             ray_pt_1 = 0 * vec
                             ray_pt_2 = 2 * vec
@@ -403,246 +474,58 @@ class BlockFinder():
                             camera_to_base = tf.transformations.compose_matrix(translate=trans, angles=tf.transformations.euler_from_quaternion(rot))
 
                             block_position_arr = np.dot(camera_to_base, homog_d_cam)
-
                             
                             # Transform ray to base frame
                             ray_pt_1_tf = np.dot(camera_to_base, homog_ray_pt_1)
                             ray_pt_2_tf = np.dot(camera_to_base, homog_ray_pt_2)
 
-
-                            self.ray_marker = create_ray_marker(
+                            ray_marker_list.markers.append(create_ray_marker(
                                                 frame="base", 
-                                                id="object_ray",
+                                                id=ray_id,
                                                 point1=Point(ray_pt_1_tf[0], ray_pt_1_tf[1], ray_pt_1_tf[2]),
                                                 point2=Point(ray_pt_2_tf[0], ray_pt_2_tf[1], ray_pt_2_tf[2]),
-                                                ray_color="red"
-                                              )
-                            
+                                                ray_color=color
+                                            )
+                            )
+                            ray_id += 1
                             rospy.loginfo("Block position: %f, %f, %f", block_position_arr[0], block_position_arr[1], block_position_arr[2])
                            
                             block_position_p = Point()
                             block_position_arr_copy = block_position_arr.copy()
                             block_position_p.x = block_position_arr_copy[0]
                             block_position_p.y = block_position_arr_copy[1]
-                            block_position_p.z = -.14
+                            block_position_p.z = -.1
 
                             # TODO: Need to calculate this later
+
+                            # Rotation about z-axis by small amount
+                            block_orientation_arr = tf.transformations.quaternion_from_euler(0, 0, block_angle)
+
                             block_orientation = Quaternion()
-                            block_orientation.w = 1.0
-                            block_orientation.x = 0
-                            block_orientation.y = 0
-                            block_orientation.z = 0
-                        
-                            curr_marker = create_block_marker(frame = "base", id = len(marker_list.markers), position = block_position_p, orientation=block_orientation, block_type = "1x1", block_color = color, transparency = 1)
-                          
+                            block_orientation.x = block_orientation_arr[0]
+                            block_orientation.y = block_orientation_arr[1]
+                            block_orientation.z = block_orientation_arr[2]
+                            block_orientation.w = block_orientation_arr[3]
+
+                            # Create a marker to visualize in RVIZ 
+                            curr_marker = create_block_marker(frame = "base", id = len(block_marker_list.markers), position = block_position_p, orientation=block_orientation, block_type=block_type, block_color = color, transparency = 1)
 
                             rospy.loginfo("Adding new marker and block pose!")
-                            marker_list.markers.append(curr_marker)
+                            block_marker_list.markers.append(curr_marker)
                             block_pose_list.append(Pose(position=block_position_p, orientation=block_orientation))
-
                         else:
                             rospy.loginfo("No ir_data has been recieved yet!")
                     else:
                         rospy.loginfo("Moments aren't large enough!")
+                else:
+                    pass
+                    rospy.loginfo("Contour area is not large enough!")
         
         self.rect_seg_img = cv_image.copy()
         self.block_poses = block_pose_list        
-        self.markers = marker_list
-
-    def top_cam_callback(self, data):
-        rospy.loginfo("RECEIVED CAMERA DATA")
+        self.ray_markers = ray_marker_list
+        self.block_markers = block_marker_list
         
-        cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
-
-
-        if(TUNE_HSV_VALS):
-            find_hsv_values(cv_image)
-
-        block_pose_list = []
-        marker_list = MarkerArray()
-
-        height, width, depth = cv_image.shape
-        low_s = 0
-        low_v = 0
-
-        hsv = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
-
-        images = [hsv, hsv, hsv, hsv, hsv]
-        i = 0
-
-
-        for color in colors:
-            rospy.loginfo("Current color: %s", color)
-            
-            low_h = colors[color]["low_h"]
-            high_h = colors[color]["high_h"]
-            low_s = colors[color]["low_s"]
-            high_s = colors[color]["high_s"]
-            low_v = colors[color]["low_v"]
-            high_v = colors[color]["high_v"]
-
-            #Converting image to HSV format
-            if color == "red":
-                hsv_mask_1 = cv2.inRange(hsv, np.array([low_h[0], low_s, low_v]), np.array([high_h[0], high_s, high_v]))
-                hsv_mask_2 = cv2.inRange(hsv, np.array([low_h[1], low_s, low_v]), np.array([high_h[1], high_s, high_v]))
-
-                hsv_mask = hsv_mask_1 | hsv_mask_2
-
-
-            else:
-                hsv_mask = cv2.inRange(hsv, np.array([low_h, low_s, low_v]), np.array([high_h, high_s, high_v]))
-
-            # Apply mask to original image
-
-            masked_img = cv2.bitwise_and(cv_image, cv_image, mask=hsv_mask)
-            self.seg_img[color] = masked_img.copy()
-
-            #Morphological opening (remove small objects from the foreground)
-            erode_1 = cv2.erode(hsv_mask, np.ones((5,5), np.uint8), iterations=1)
-            dilate_1 = cv2.dilate(erode_1, np.ones((5,5), np.uint8), iterations=1)
-
-            #Morphological closing (fill small holes in the foreground)
-            dilate_2 = cv2.dilate(dilate_1, np.ones((10,10), np.uint8), iterations=1)
-            erode_2 = cv2.erode(dilate_2, np.ones((10,10), np.uint8), iterations=1)
-
-            images[i] = erode_2.copy()
-            
-            ret, thresh = cv2.threshold(erode_2,157,255,0)
-
-            im2, contours, hierarchy = cv2.findContours(thresh,cv2.RETR_TREE,cv2.CHAIN_APPROX_NONE)
-
-            #Draw the countours.
-            #cv2.drawContours(cv_image, contours, -1, (0,255,0), 3)
-            large_contours = []
-
-            
-            for c in contours:
-                area = cv2.contourArea(c)
-                if(area > 1000):
-                    large_contours.append(c)
-                    
-                    rospy.loginfo("AREA: %f", area)
-                    rect = cv2.minAreaRect(c)
-                    box = cv2.boxPoints(rect)
-                    box = np.int0(box)
-                    cv2.drawContours(cv_image, [box], 0, color_vals[color] , 2)
-
-                
-
-                #angle = calc_center_angle(c, cv_image)
-
-                #cv2.rectangle(cv_image, (x, y), (x+w, y+h), (0, 255, 0), 2)
-
-
-            numobj = len(contours) # number of objects found in current frame
-
-            if numobj > 0:
-                for contour in large_contours:
-                    moms = cv2.moments(contour)
-
-                    if moms['m00']>500:
-                        cx = int(moms['m10']/moms['m00'])
-                        cy = int(moms['m01']/moms['m00'])
-
-                        print 'cx = ', cx
-                        print 'cy = ', cy
-
-                        #cx = cx - self.camera_model.cx()
-                        #cy = cy - self.camera_model.cy()
-
-                        cv2.circle(cv_image,(cx,cy), 10, color_vals[color], 1)
-
-                        self.pixel_loc = [cx, cy]
-                        
-
-
-                        rospy.loginfo("Found %d %s objects", numobj, color)
-                        obj_found = True
-
-                        cam_info = rospy.wait_for_message("/camera/rgb/camera_info", CameraInfo, timeout=None)
-
-                        
-                        vec = np.array(self.top_camera_model.projectPixelTo3dRay((cx, cy)))
-
-                        #rospy.loginfo("IR reading is: %f", self.ir_reading)
-                        d = .2
-
-                        ray_pt_1 = 0 * vec
-                        ray_pt_2 = 2 * vec
-
-
-                        #d = (self.ir_reading - self.object_height)
-                        norm_vec = np.array([0, 0, 1])
-
-                        rospy.loginfo("Vec: %f, %f, %f", vec[0], vec[1], vec[2])
-                        rospy.loginfo("Norm Vec: %f, %f, %f", norm_vec[0], norm_vec[1], norm_vec[2])
-
-                        d_proj = d * np.dot(norm_vec, vec) / (np.linalg.norm(norm_vec) * np.linalg.norm(vec))
-
-
-                        rospy.loginfo("Distance to object: %f", d)
-                        rospy.loginfo("Projected distance to object: %f", d_proj)
-                        
-                        d_cam = d * vec
-                        #d_cam = vec
-
-                        homog_d_cam = np.concatenate((d_cam, np.ones(1))).reshape((4,1))
-                        homog_ray_pt_1 = np.concatenate((ray_pt_1, np.ones(1))).reshape((4,1))
-                        homog_ray_pt_2 = np.concatenate((ray_pt_2, np.ones(1))).reshape((4,1))
-
-                        # TODO: Here we need a transform from the top camera to baxter's base
-
-
-                        # Wait for transformation from base to head_camera
-                        self.tf_listener.waitForTransform('/base', self.limb + "_camera", rospy.Time(), rospy.Duration(4))
-                        (trans, rot) = self.tf_listener.lookupTransform('/base', self.limb + "_camera", rospy.Time())
-
-                        camera_to_base = tf.transformations.compose_matrix(translate=trans, angles=tf.transformations.euler_from_quaternion(rot))
-
-                        block_position_arr = np.dot(camera_to_base, homog_d_cam)
-
-                        
-                        # Transform ray to base frame
-                        ray_pt_1_tf = np.dot(camera_to_base, homog_ray_pt_1)
-                        ray_pt_2_tf = np.dot(camera_to_base, homog_ray_pt_2)
-
-
-                        self.ray_marker = create_ray_marker(
-                                            frame="base", 
-                                            id="object_ray",
-                                            point1=Point(ray_pt_1_tf[0], ray_pt_1_tf[1], ray_pt_1_tf[2]),
-                                            point2=Point(ray_pt_2_tf[0], ray_pt_2_tf[1], ray_pt_2_tf[2]),
-                                            ray_color="red"
-                                            )
-                        
-                        rospy.loginfo("Block position: %f, %f, %f", block_position_arr[0], block_position_arr[1], block_position_arr[2])
-                        
-                        block_position_p = Point()
-                        block_position_arr_copy = block_position_arr.copy()
-                        block_position_p.x = block_position_arr_copy[0]
-                        block_position_p.y = block_position_arr_copy[1]
-                        block_position_p.z = -.14
-
-                        # TODO: Need to calculate this later
-                        block_orientation = Quaternion()
-                        block_orientation.w = 1.0
-                        block_orientation.x = 0
-                        block_orientation.y = 0
-                        block_orientation.z = 0
-                    
-                        curr_marker = create_block_marker(frame = "base", id = len(marker_list.markers), position = block_position_p, orientation=block_orientation, block_type = "1x1", block_color = color, transparency = 1)
-                        
-
-                        rospy.loginfo("Adding new marker and block pose!")
-                        marker_list.markers.append(curr_marker)
-                        block_pose_list.append(Pose(position=block_position_p, orientation=block_orientation))
-
-                    else:
-                        rospy.loginfo("Moments aren't large enough!")
-        
-        self.rect_seg_img = cv_image.copy()
-        self.block_poses = block_pose_list        
-        self.markers = marker_list
 
     def hand_cam_info_callback(self, data):
         self.hand_camera_model = PinholeCameraModel()
@@ -657,18 +540,99 @@ class BlockFinder():
     def ir_callback(self, data):
         self.ir_reading = data.range
         #rospy.loginfo("IR reading: %f", self.ir_reading)
-        if(self.ir_reading > 60):
+        if(self.ir_reading > 65):
             #rospy.loginfo("Invalid IR reading")
             self.ir_reading = 0.4
 
-def calc_center_angle(cont, cv_image):
-    #img_shape = cv_image.shape
+def calc_block_type(block_ratio):
+    if(block_ratio > 0.5 and block_ratio <= 1.5):
+        block_type = "1x1"
+    elif(block_ratio > 1.5 and block_ratio <= 2.5):
+        block_type = "1x2"
+    elif(block_ratio > 2.5 and block_ratio <= 3.5):
+        block_type = "1x3"
+    elif(block_ratio > 3.5 and block_ratio <= 4.5):
+        block_type = "1x4"
+    else:
+        rospy.loginfo("BLOCK RATIO is %f", block_ratio)
+        block_type = "None"
+
+    return block_type
+def generate_gripper_mask(hand_cam_image):
+    pass
+
+def calc_ratio(height, width):
+    #rospy.loginfo("Height: %d, Width: %d", h, w)
+    if(height > width):
+        temp = height
+        height = width
+        width = temp
+
+    rospy.loginfo("Height: %d, Width: %d", height, width)
+
+    ratio = width / height
+
+    return ratio
+
+
+def calc_angle(cropped_image):
+    # PCA
+    pca_img = cropped_image.copy()
+    gray = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2GRAY)
+    h, w = gray.shape
+
+    #From a matrix of pixels to a matrix of coordinates of non-black points.
+    #(note: mind the col/row order, pixels are accessed as [row, col]
+    #but when we draw, it's (x, y), so have to swap here or there)
+    mat = []
+    for col in range(w):
+        for row in range(h):
+            if gray[row, col] > 0:
+                mat.append([col, row])
+
+    mat = np.array(mat).astype(np.float32) #have to convert type for PCA
+
+    #mean (e. g. the geometrical center)
+    #and eigenvectors (e. g. directions of principal components)
+    m, e = cv2.PCACompute(mat, mean = None)
+
+    #now to draw: let's scale our primary axis by 100,
+    #and the secondary by 50
+    center = tuple(m[0])
+    endpoint1 = tuple(m[0] + e[0]*100)
+    endpoint2 = tuple(m[0] + e[1]*50)
+    
+    """
+    cv2.circle(pca_img, center, 5, 255)
+    # Major Axis
+    cv2.line(pca_img, center, endpoint1, 255, 4)
+
+    # Minor Axis
+    cv2.line(pca_img, center, endpoint2, 255, 4)
+
+    plt.imshow(pca_img)
+    plt.show()
+    """
+
+    # Calculate angle of major axis
+    major_x = endpoint1[0] - center[0]
+    major_y = endpoint1[1] - center[1]
+    minor_x = endpoint2[0] - center[0]
+    minor_y = endpoint2[1] - center[1]
+
+    angle_rad_major = math.atan2(major_y, major_x)
+
+    return angle_rad_major
+
+def calc_center_angle_old(cont, cv_img):
+    
+    #img_shape = cv_img.shape
 
     #blank_img = np.zeros(img_shape, dtype=np.uint8)
 
-    cont_img = cv2.drawContours(cv_image, cont, 0, (0, 0, 255), 2)
+    #cont_img = cv2.drawContours(cv_img, cont, 0, (0, 0, 255), 2)
 
-    gray_img = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
+    gray_img = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
     edges = cv2.Canny(gray_img, 50, 100, apertureSize = 3)
 
 
@@ -707,18 +671,26 @@ def create_block_marker(frame, id, position, orientation, block_type, block_colo
     curr_marker.frame_locked = True
     curr_marker.pose.position = position
     curr_marker.pose.orientation = orientation
+   
+    single_unit_dim = 0.03
+
     if(block_type == "1x1"):
-        curr_marker.scale.x = .03
-        curr_marker.scale.y = .03
-        curr_marker.scale.z = .03
+        curr_marker.scale.x = single_unit_dim
+        curr_marker.scale.y = single_unit_dim
+        curr_marker.scale.z = single_unit_dim
     elif(block_type == "1x2"):
-        curr_marker.scale.x = .03
-        curr_marker.scale.y = .06
-        curr_marker.scale.z = .03
+        curr_marker.scale.x = single_unit_dim
+        curr_marker.scale.y = 2*single_unit_dim 
+        curr_marker.scale.z = single_unit_dim 
     elif(block_type == "1x3"):
-        curr_marker.scale.x = .03
-        curr_marker.scale.y = .09
-        curr_marker.scale.z = .03
+        curr_marker.scale.x = single_unit_dim 
+        curr_marker.scale.y = 3 *single_unit_dim
+        curr_marker.scale.z = single_unit_dim
+    elif(block_type == "1x4"):
+        curr_marker.scale.x = single_unit_dim 
+        curr_marker.scale.y = 4 *single_unit_dim
+        curr_marker.scale.z = single_unit_dim
+
     else:
         rospy.logerror("%s is not a supported block type. The only supported block types are 2x1, 1x2, and 1x3", block_type)
 
@@ -754,13 +726,13 @@ def create_block_marker(frame, id, position, orientation, block_type, block_colo
     return curr_marker
 
 
-def create_ray_marker(frame, id, point1, point2, ray_color="red"):
+def create_ray_marker(frame, id, point1, point2, ray_color):
     curr_marker = Marker()
     curr_marker.header.frame_id = frame
     
     curr_marker.type = 5 # line list
     curr_marker.action = 0
-    curr_marker.id = 27
+    curr_marker.id = id
     curr_marker.frame_locked = True
     #curr_marker.pose.position = position
     #curr_marker.pose.orientation = orientation
@@ -827,21 +799,22 @@ def main():
             pose_msg = PoseArray()
             pose_msg.poses = block_finder.block_poses
             block_finder.pose_pub.publish(pose_msg)
-            block_finder.marker_pub.publish(block_finder.markers)
-            rospy.loginfo("There are %d markers", len(block_finder.markers.markers))
+            block_finder.marker_pub.publish(block_finder.block_markers)
+            rospy.loginfo("There are %d block markers", len(block_finder.block_markers.markers))
 
             # Publish the camera x,y coordinate location of the block
             #block_finder.block_xy_pub.publish(block_finder.pixel_loc)
 
             # Publish ray that intersects with camera and object
-            block_finder.ray_marker_pub.publish(block_finder.ray_marker)
-
-        block_finder.rect_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.rect_seg_img, "bgr8"))
-        block_finder.red_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["red"], "bgr8"))
-        block_finder.green_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["green"], "bgr8"))
-        block_finder.yellow_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["yellow"], "bgr8"))
-        block_finder.blue_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["blue"], "bgr8"))
-
+            block_finder.ray_marker_pub.publish(block_finder.ray_markers)
+            rospy.loginfo("There are %d ray markers", len(block_finder.ray_markers.markers))
+    
+        block_finder.rect_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.rect_seg_img))
+        block_finder.red_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["red"]))
+        block_finder.green_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["green"]))
+        block_finder.yellow_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["yellow"]))
+        block_finder.blue_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["blue"]))
+#
         
 
         # Sleep
