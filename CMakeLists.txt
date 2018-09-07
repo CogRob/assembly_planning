@@ -9,9 +9,13 @@ add_compile_options(-std=c++11)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   gazebo_ros
+  gazebo_msgs
   roscpp
   rospy
   std_msgs
+  baxter_core_msgs
+  baxter_interface
+  baxter_tools
 )
 
 ## Gazebo dependencies
@@ -26,7 +30,7 @@ find_package(Boost REQUIRED COMPONENTS system)
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
 ## See http://ros.org/doc/api/catkin/html/user_guide/setup_dot_py.html
-# catkin_python_setup()
+catkin_python_setup()
 
 ################################################
 ## Declare ROS messages, services and actions ##
@@ -111,7 +115,7 @@ find_package(Boost REQUIRED COMPONENTS system)
 catkin_package(
   INCLUDE_DIRS include
 #  LIBRARIES metareasoning_agent
-  CATKIN_DEPENDS gazebo_ros rospy roscpp std_msgs
+  CATKIN_DEPENDS gazebo_ros rospy roscpp std_msgs gazebo_msgs baxter_core_msgs baxter_interface baxter_tools
 #  DEPENDS system_lib
 )
 
@@ -154,11 +158,11 @@ include_directories(
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(gazebo_world
-  ${catkin_LIBRARIES}
-  ${GAZEBO_LIBRARIES}
-  ${Boost_LIBRARIES}
-)
+#target_link_libraries(gazebo_world
+#  ${catkin_LIBRARIES}
+#  ${GAZEBO_LIBRARIES}
+#  ${Boost_LIBRARIES}
+#)
 
 #############
 ## Install ##
