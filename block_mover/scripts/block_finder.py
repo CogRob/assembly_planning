@@ -250,8 +250,8 @@ def find_hsv_values(img):
     cv.destroyAllWindows()
 
 class BlockFinder():
-    def __init__(self, limb):
-        self.limb = limb
+    def __init__(self, camera):
+        self.camera = camera
 
         self.block_poses = []
         self.markers = MarkerArray()
@@ -290,30 +290,31 @@ class BlockFinder():
         self.ray_marker_pub     = rospy.Publisher("block_finder/image_rays", MarkerArray, queue_size=20)
 
     def subscribe(self):
-        # The camera in left or right hand
-        self.hand_cam_sub   = rospy.Subscriber("/cameras/" + self.limb + "_camera/image", Image, self.hand_cam_callback)
-
-        # The camera above the table
-        #self.top_cam_sub    = rospy.Subscriber("/camera/rgb/image_rect_color", Image, self.top_cam_callback)
-        self.hand_cam_info_sub       = rospy.Subscriber("/cameras/" + self.limb + "_camera/camera_info_std", CameraInfo, self.hand_cam_info_callback)
-        #self.top_cam_info_sub       = rospy.Subscriber("/camera/rgb/camera_info", CameraInfo, self.top_cam_info_callback)
-        self.ir_sub         = rospy.Subscriber("/robot/range/" + self.limb + "_range/state", Range, self.ir_callback)
+        if(self.camera == "right_hand"):
+            # The camera in left or right hand
+            self.hand_cam_sub   = rospy.Subscriber("/cameras/" + self.limb + "_camera/image", Image, self.hand_cam_callback)
+            self.hand_cam_info_sub       = rospy.Subscriber("/cameras/" + self.limb + "_camera/camera_info_std", CameraInfo, self.hand_cam_info_callback)
+            self.ir_sub         = rospy.Subscriber("/robot/range/" + self.limb + "_range/state", Range, self.ir_callback)
+        elif(self.camera == "top"):
+            # The camera above the table
+            self.top_cam_sub    = rospy.Subscriber("/camera/rgb/image_rect_color", Image, self.top_cam_callback)
+            self.top_cam_info_sub       = rospy.Subscriber("/camera/rgb/camera_info", CameraInfo, self.top_cam_info_callback)
         
 
     def hand_cam_callback(self, data):
         cv_image = self.bridge.imgmsg_to_cv2(data)
 
-        self.find_blocks(cv_image, camera_name="right_hand")
+        self.find_blocks(cv_image, camera_name=self.camera)
     
     def top_cam_callback(self, data):
         cv_image = self.bridge.imgmsg_to_cv2(data)
 
-        self.find_blocks(cv_image, camera_name="top")
+        self.find_blocks(cv_image, camera_name=self.camera)
 
     '''
     Thresholds camera image and stores object centroid location (x,y) in Baxter's base frame.
     '''
-    def find_blocks(self, cv_image, camera_name):
+    def find_blocks(self, cv_image):
         block_pose_list = []
         block_marker_list = MarkerArray()
         ray_marker_list = MarkerArray()
@@ -405,11 +406,14 @@ class BlockFinder():
                     moms = cv2.moments(contour)
 
                     if moms['m00']*self.ir_reading > 180:
+                        rospy.loginfo("Found %d %s objects", num_obj, color)
+                        obj_found = True
+                        
                         cx = int(moms['m10']/moms['m00'])
                         cy = int(moms['m01']/moms['m00'])
 
-                        print 'cx = ', cx
-                        print 'cy = ', cy
+                        # print 'cx = ', cx
+                        # print 'cy = ', cy
 
                         #cx = cx - self.camera_model.cx()
                         #cy = cy - self.camera_model.cy()
@@ -422,22 +426,19 @@ class BlockFinder():
 
                         self.pixel_loc = [cx, cy]
                         
-
-
-                        rospy.loginfo("Found %d %s objects", num_obj, color)
-                        obj_found = True
-                        if(camera_name == "right_hand"):
+                        if(self.camera == "right_hand"):
                             vec = np.array(self.hand_camera_model.projectPixelTo3dRay((cx, cy)))
-                        elif(camera_name == "top"):
+                        elif(self.camera == "top"):
                             vec = np.array(self.top_camera_model.projectPixelTo3dRay((cx, cy)))
                         else:
                             # Invalid camera name
                             rospy.loginfo("The camera name you passed to find blocks is invalid!")
                             return
 
-
-                        if(self.ir_reading != None):
+                        # If we're using the hand camera, make sure we have a valid IR reading...
+                        if(self.camera == "top" or (self.camera == "right_hand" and self.ir_reading != None and)):
                             rospy.loginfo("IR reading is: %f", self.ir_reading)
+
                             if(camera_name =="right_hand"):
                                 d = self.ir_reading + 0.15
                             elif(camera_name =="top"):
@@ -474,7 +475,8 @@ class BlockFinder():
                             camera_to_base = tf.transformations.compose_matrix(translate=trans, angles=tf.transformations.euler_from_quaternion(rot))
 
                             block_position_arr = np.dot(camera_to_base, homog_d_cam)
-                            
+
+                            # Create a ray from the camera to the detected block                            
                             # Transform ray to base frame
                             ray_pt_1_tf = np.dot(camera_to_base, homog_ray_pt_1)
                             ray_pt_2_tf = np.dot(camera_to_base, homog_ray_pt_2)
@@ -487,18 +489,18 @@ class BlockFinder():
                                                 ray_color=color
                                             )
                             )
+
                             ray_id += 1
                             rospy.loginfo("Block position: %f, %f, %f", block_position_arr[0], block_position_arr[1], block_position_arr[2])
-                           
+
                             block_position_p = Point()
                             block_position_arr_copy = block_position_arr.copy()
                             block_position_p.x = block_position_arr_copy[0]
                             block_position_p.y = block_position_arr_copy[1]
                             block_position_p.z = -.1
 
-                            # TODO: Need to calculate this later
-
-                            # Rotation about z-axis by small amount
+                            # TODO: double check that the angle is correct (What if camera rotates?)
+                            # Rotation about z-axis
                             block_orientation_arr = tf.transformations.quaternion_from_euler(0, 0, block_angle)
 
                             block_orientation = Quaternion()
