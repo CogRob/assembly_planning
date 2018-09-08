@@ -143,15 +143,6 @@ def find_jp(major_lines, minor_lines, corners, jp_img):
 
     corners = np.array(np.flip(corners, axis=0))
 
-    print(corners.shape)
-
-    #for i in range(corners.shape[1]):
-    #    corner = corners[:, i]
-    #    print("Corner: ", corner)
-    #    cv2.circle(jp_img, tuple(corner), 1, (0, 0, 0))
-
-    plt.imshow(jp_img)
-    plt.show()
     angle_thresh = math.pi / 8
 
     distance_to_corner = np.zeros((len(major_lines), len(minor_lines)))
@@ -163,7 +154,8 @@ def find_jp(major_lines, minor_lines, corners, jp_img):
         for j in range(len(minor_lines)):
             major_line = major_lines[i]
             minor_line = minor_lines[j]
-            # Check if line 1 and 2 are within angle threshold of one another
+            # Check if line 1 and 2 are within angle threshold of eachother
+
             angle1 = major_line[2]
             angle2 = minor_line[2]
 
@@ -253,19 +245,14 @@ def find_intersection(a1, a2, b1, b2):
 
     denom = np.dot(dap, db)
     num = np.dot(dap, dp)
-
     intersection =  (num / denom.astype(float))*db + b1
     
     return np.reshape(intersection, (2,1))
 
 
-# Loading Image
-images = []
-
-
-current_frame = 0
-
-images = pickle.load(open("images.p", "rb"))
+# Loading Image from pickle
+#images = []
+#images = pickle.load(open("images.p", "rb"))
 
 for i in range(0, 10):
     # For reading real images
@@ -504,43 +491,42 @@ for i in range(0, 10):
 
 
   
-    plt.subplot("341")
-    plt.imshow(orig_img,cmap='gray')
-    plt.title("Original Image")
-
+    plt.subplot(3, 4, 1)
+    plt.imshow(hsv_img,cmap='gray')
+    plt.title("HSV Masked")
+    plt.subplot(3, 4, 2)
     plt.imshow(rect_img,cmap='gray')
-    plt.title("HSV Thresholded Image")
-
-    plt.subplot("342")
+    plt.title("Bounding Box")
+    plt.subplot(3, 4, 3)
     plt.imshow(canny_img,cmap='gray')
-    plt.title("Canny Image")
-    plt.subplot("343")
+    plt.title("Canny")
+    plt.subplot(3, 4, 4)
     plt.imshow(harris_img,cmap='gray')
-    plt.title("Harris Image")
-    plt.subplot("344")
+    plt.title("Harris")
+    plt.subplot(3, 4, 5)
     plt.imshow(canny_hough_img,cmap='gray')
-    plt.title("Canny Hough Image")
-    plt.subplot("345")
+    plt.title("Canny Hough")
+    plt.subplot(3, 4, 6)
     plt.imshow(hough_p_img,cmap='gray')
-    plt.title("Probabilistic Hough Image")
-    plt.subplot("346")
+    plt.title("Probabilistic Hough")
+    plt.subplot(3, 4, 7)
     plt.imshow(brisk_img,cmap='gray')
-    plt.title("Brisk Image")
-    plt.subplot("347")
+    plt.title("Brisk")
+    plt.subplot(3, 4, 8)
     plt.imshow(lap_img,cmap='gray')
-    plt.title("Laplacian Image")
-    plt.subplot("348")
+    plt.title("Laplacian")
+    plt.subplot(3, 4, 9)
     plt.imshow(pca_img,cmap='gray')
-    plt.title("PCA Image")
-    plt.subplot("349")
-    plt.imshow(lap_hough_img,cmap='gray')
-    plt.title("Hough Laplacian Image")
+    plt.title("PCA")
     plt.subplot(3, 4, 10)
-    plt.imshow(jp_img_1,cmap='gray')
-    plt.title("Junction Point Image (Canny)")
+    plt.imshow(lap_hough_img,cmap='gray')
+    plt.title("Laplacian Hough")
     plt.subplot(3, 4, 11)
+    plt.imshow(jp_img_1,cmap='gray')
+    plt.title("Junction Point (Canny)")
+    plt.subplot(3, 4, 12)
     plt.imshow(jp_img_2,cmap='gray')
-    plt.title("Junction Point Image (Laplacian)")
+    plt.title("Junction Point (Laplacian)")
     plt.suptitle("Image " + str(i))
     plt.show()
     

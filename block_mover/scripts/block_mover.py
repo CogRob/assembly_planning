@@ -30,8 +30,8 @@ class BlockMover:
 
     def subscribe(self):
         # April tag detections
-        self.hand_cam_tags_sub = rospy.Subscriber("/hand_cam/tag_detections", AprilTagDetectionArray, self.hand_cam_tag_callback)
-        self.top_cam_tags_sub = rospy.Subscriber("/top_cam/tag_detections", AprilTagDetectionArray, self.top_cam_tag_callback)
+        self.hand_cam_tags_sub = rospy.Subscriber("/desktop/tag_detections", AprilTagDetectionArray, self.hand_cam_tag_callback)
+        self.top_cam_tags_sub = rospy.Subscriber("/laptop/tag_detections", AprilTagDetectionArray, self.top_cam_tag_callback)
 
     def publish(self):
         #self.top_cam_to_base_pub = Publisher("/top_cam_to_base", )
@@ -77,6 +77,7 @@ class BlockMover:
                 (hand_cam_to_base_trans, hand_cam_to_base_rot) = self.tf_listener.lookupTransform('/right_hand_camera', 'base', rospy.Time())
 
                 hand_cam_to_base = tf.transformations.compose_matrix(translate=hand_cam_to_base_trans, angles=hand_cam_to_base_rot)
+                
 
                 for i in range(3):
                     table_to_hand_cam = np.linalg.inv(self.hand_cam_to_table[i])
@@ -90,6 +91,16 @@ class BlockMover:
                     self.top_cam_to_base_stamp = rospy.Time.now()
 
                     print("Top cam to base[",i ,"]: ", self.top_cam_to_base[0:3,3], " Time hand: ", self.hand_cam_to_table_stamp.secs, " Time top: ", self.top_cam_to_table_stamp.secs)
+                    
+                    print("Top cam to base[",i ,"]: ", self.top_cam_to_base, " Time hand: ", self.hand_cam_to_table_stamp.secs, " Time top: ", self.top_cam_to_table_stamp.secs)
+
+
+        tf = np.array(
+        [ 0.71756823,  0.41253578,  0.56116849, -0.16081071],
+        [ 0.25325373,  0.59601547, -0.76198957, -0.7268147 ],
+        [-0.64881306,  0.68889752,  0.32320554,  1.33125278],
+        [ 0.        ,  0.        ,  0.        ,  1.        ]]
+        )
                 
             else:
                rospy.loginfo("TF Timestamps are off by %f", time_diff)
@@ -105,23 +116,6 @@ class BlockMover:
             else:
                hand_cam_to_table_age = rospy.Time.now() - self.hand_cam_to_table_stamp
                rospy.loginfo("Hand cam to table transform is available (%f.%f old).", hand_cam_to_table_age.secs, hand_cam_to_table_age.nsecs)
-
-
-
-def main():
-    block_mover = BlockMover()
-    rospy.init_node('block_mover', anonymous=True)
-
-    block_mover.subscribe()
-    block_mover.publish()
-
-    while not rospy.is_shutdown():
-        block_mover.calc_top_cam_to_base()
-        rospy.sleep(0.1)
-
-if __name__ == '__main__':
-               rospy.loginfo("Hand cam to table transform is available!")
-
 
 
 def main():

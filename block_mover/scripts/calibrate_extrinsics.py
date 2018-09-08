@@ -4,8 +4,8 @@ import rospkg
 import tf
 import numpy as np
 import math
-from apriltags2_ros import AprilTagDetection, AprilTagDetectionArray
-from geometry import tf_conversions as tfc
+from apriltags2_ros.msg import AprilTagDetection, AprilTagDetectionArray
+import tf_conversions as tfc
 
 
 import rospy
@@ -17,18 +17,14 @@ class BlockMover:
 
         self.hand_cam_to_table_stamp = None
         self.top_cam_to_table_stamp = None
-        self.top_cam_to_base_stamp
-
-
-
-
+        self.top_cam_to_base_stamp = None
 
         self.tf_listener = tf.TransformListener()
 
     def subscribe(self):
         # April tag detections
-        self.hand_cam_tags_sub = rospy.Subscriber("/hand_cam/tag_detections", AprilTagDetectionArray, self.hand_cam_tag_callback)
-        self.top_cam_tags_sub = rospy.Subscriber("/top_cam/tag_detections", AprilTagDetectionArray, self.top_cam_tag_callback)
+        self.hand_cam_tags_sub = rospy.Subscriber("/desktop/tag_detections", AprilTagDetectionArray, self.hand_cam_tag_callback)
+        self.top_cam_tags_sub = rospy.Subscriber("/laptop/tag_detections", AprilTagDetectionArray, self.top_cam_tag_callback)
 
     def publish(self):
         #self.top_cam_to_base_pub = Publisher("/top_cam_to_base", )
@@ -43,8 +39,8 @@ class BlockMover:
         pass
     
     def hand_cam_tag_callback(self, tag_detections):
-        self.hand_cam_to_table = tfc.toMatrix(tag_detections[0].pose)
-        self.hand_cam_to_table_stamp = tag_detections.header.stamp
+        self.hand_cam_to_table = tfc.toMatrix(tag_detections.detections[0].pose)
+        self.hand_cam_to_table_stamp = tag_detections.detectionsheader.stamp
         
     def top_cam_tag_callback(self, tag_detections):
         self.top_cam_to_table = tfc.toMatrix(tag_detections[0].pose)

@@ -427,7 +427,7 @@ def main():
                 block_picker.pose.orientation.w = curr_kin[6]
                 block_picker.pose.orientation.x = curr_kin[3]
                 block_picker.pose.orientation.y = curr_kin[4]
-                block_picker.pose.orientation.z = curr_kin[5
+                block_picker.pose.orientation.z = curr_kin[5]
 
         else:
             rospy.loginfo("Running block_picker on Real Baxter")
