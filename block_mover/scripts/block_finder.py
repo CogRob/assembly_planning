@@ -2,45 +2,42 @@
 import rospy
 import cv2
 import numpy as np
-
-import argparse
-import struct
 import sys
 import copy
 import rospkg
 import math
+import tf
 
 from matplotlib import pyplot as plt
-
 from std_msgs.msg import String, Int32
 from sensor_msgs.msg import Image, CameraInfo, Range
 from geometry_msgs.msg import Pose, PoseArray, Point, Quaternion, Pose2D
-
 from image_geometry import PinholeCameraModel
-
 from visualization_msgs.msg import Marker, MarkerArray
-
 from cv_bridge import CvBridge
-import tf
 from block_mover.msg import BlockObservation, BlockObservationArray
 
 #import baxter_interface
+# Check opencv version
 if(str.startswith(cv2.__version__, '3')):
-    print("!!!")
+    print("OpeCV3 detected.")
     OPENCV3 = True
     TOP_CAM = True
     HAND_CAM = False
 else:
+    print("OpeCV2 detected.")
     OPENCV3 = False
     TOP_CAM = False
     HAND_CAM = True
 
+
+# To enable HSV values that were trained in gazebo
 SIM = False
 
+# Enables a tool that helps to tune HSV thresholds
 TUNE_HSV_VALS = False
 
-
-
+# TODO; Store all of these in a param file somewhere
 if(TOP_CAM):
     BLU_LOW_HUE     = 106
     BLU_HIGH_HUE    = 115
@@ -157,7 +154,6 @@ if(SIM):
     YEL_HIGH_VAL    = 255
 
 
-
 colors = {
         "red":      {   "low_h": [RED_LOW_HUE_1, RED_LOW_HUE_2],   "high_h": [RED_HIGH_HUE_1, RED_HIGH_HUE_2],
                         "low_s": RED_LOW_SAT,   "high_s": RED_HIGH_SAT,
@@ -184,10 +180,10 @@ color_vals = {
     "teal":   (255, 60, 0)
 }
 
-
 # From https://github.com/botforge/ColorTrackbar
 def nothing(x):
     pass
+
 
 # From https://github.com/botforge/ColorTrackbar
 def find_hsv_values(img):
@@ -258,6 +254,7 @@ def find_hsv_values(img):
     cap.release()
     cv.destroyAllWindows()
 
+
 class BlockFinder():
     def __init__(self, camera):
         self.camera = camera
@@ -274,26 +271,15 @@ class BlockFinder():
         self.ir_reading = None
         self.top_cam_to_base_tf_br = tf.TransformBroadcaster()
 
-        # x = -y
-        # y = -x 
-        # z = -z
+        # Move this to other ros node
+        ## TO MOVE
         orig_x = -0.09
         orig_y = -0.7468147
         orig_z = 1.22
+
         yaw = 180.
         pitch = 0
         roll = 80
-
-        """"
-        camera_to_base = np.array(
-            [
-            [ 0.71756823,  0.41253578,  0.56116849, -orig_y],
-            [ 0.25325373,  0.59601547, -0.76198957, -orig_x],
-            [-0.64881306,  0.68889752,  0.32320554, orig_z],
-            [ 0.        ,  0.        ,  0.        ,  1.        ]
-            ]
-        )
-        """
 
         self.top_to_base_mat = np.zeros((4,4))
         self.top_to_base_mat[0, 3] = -orig_y
@@ -305,21 +291,12 @@ class BlockFinder():
         self.top_to_base_mat = self.top_to_base_mat + R
         print(self.top_to_base_mat)
 
+        ## END TO MOVE
+
         if(self.camera == "top"):
             self.transparency = 1.
         elif(self.camera == "right_hand"):
             self.transparency = 0.5
-
-        """
-        self.top_to_base_mat = np.array(
-                [
-                    [ 1,  0,  0, -orig_y],
-                    [ 0,  1,  0, -orig_x],
-                    [ 0,  0,  1,  orig_z],
-                    [ 0,  0,  0,       1]
-                ]
-        )
-        """
 
         self.pub_rate = rospy.Rate(1)
         self.seg_img = {
@@ -330,26 +307,31 @@ class BlockFinder():
             }
         self.rect_seg_img = np.zeros((800,800,3), dtype=np.uint8)
 
-        self.pixel_loc = None
-
         # TODO: Tune!
         self.top_cam_table_dist = 1.33
 
         self.block_obs = []
 
+        self.detected_blocks = 0
+
     def publish(self):
         self.pose_pub           = rospy.Publisher("block_finder/" + self.camera + "/block_poses", PoseArray, queue_size=1)
-        #self.block_xy_pub             = rospy.Publisher("block_finder/" + self.camera + "/block_xy", Point, queue_size=1)
+
+        # The segmented images
         self.red_seg_img_pub    = rospy.Publisher("block_finder/" + self.camera + "/red_segmented_image", Image, queue_size=1)
         self.yellow_seg_img_pub = rospy.Publisher("block_finder/" + self.camera + "/yellow_segmented_image", Image, queue_size=1)
         self.blue_seg_img_pub   = rospy.Publisher("block_finder/" + self.camera + "/blue_segmented_image", Image, queue_size=1)
         self.green_seg_img_pub  = rospy.Publisher("block_finder/" + self.camera + "/green_segmented_image", Image, queue_size=1)
+
+        # The image with bounded boxes around detected blocks
         self.rect_seg_img_pub   = rospy.Publisher("block_finder/" + self.camera + "/rect_segmented_image", Image, queue_size=1)
+        # The detected poses of markers
         self.marker_pub         = rospy.Publisher("block_finder/" + self.camera + "/block_markers", MarkerArray, queue_size=1)
+        # Rays from the camera to detected blocks
         self.ray_marker_pub     = rospy.Publisher("block_finder/" + self.camera + "/image_rays", MarkerArray, queue_size=1)
 
+        # The observations of blocks
         self.block_obs_pub      = rospy.Publisher("block_finder/" + self.camera + "/block_obs", BlockObservationArray, queue_size=1)
-
 
     def subscribe(self):
         if(self.camera == "right_hand"):
@@ -527,18 +509,14 @@ class BlockFinder():
 
                         # If we're using the hand camera, make sure we have a valid IR reading...
                         if(self.camera == "top" or (self.camera == "right_hand" and self.ir_reading != None)):
-                            rospy.loginfo("IR Valid")
                             if(self.camera =="right_hand"):
                                 d = self.ir_reading + 0.15
                             elif(self.camera =="top"):
                                 d = self.top_cam_table_dist
-                            #d = 0.55
 
                             ray_pt_1 = 0 * vec
                             ray_pt_2 = 2 * vec
 
-
-                            #d = (self.ir_reading - self.object_height)
                             norm_vec = np.array([0, 0, 1])
 
                             rospy.loginfo("Vec: %f, %f, %f", vec[0], vec[1], vec[2])
@@ -546,12 +524,10 @@ class BlockFinder():
 
                             d_proj = d * np.dot(norm_vec, vec) / (np.linalg.norm(norm_vec) * np.linalg.norm(vec))
 
-
                             rospy.loginfo("Distance to object: %f", d)
                             rospy.loginfo("Projected distance to object: %f", d_proj)
                             
                             d_cam = d * vec
-                            #d_cam = vec
 
                             homog_d_cam = np.concatenate((d_cam, np.ones(1))).reshape((4,1))
                             homog_ray_pt_1 = np.concatenate((ray_pt_1, np.ones(1))).reshape((4,1))
@@ -561,7 +537,7 @@ class BlockFinder():
                                 camera_to_base = self.top_to_base_mat
                         
                             else:
-                                # Wait for transformation from base to camera
+                                # Wait for transformation from base to camera as this change as the hand_camera moves
                                 self.tf_listener.waitForTransform('/base', self.camera + "_camera", rospy.Time(), rospy.Duration(4))
                                 (trans, rot) = self.tf_listener.lookupTransform('/base', self.camera + "_camera", rospy.Time())
 
@@ -622,10 +598,11 @@ class BlockFinder():
                     rospy.loginfo("Contour area is not large enough!")
         
         self.rect_seg_img = cv_image.copy()
-        self.block_poses = block_pose_list        
         self.ray_markers = ray_marker_list
         self.block_markers = block_marker_list
         self.block_obs = block_obs_list
+
+        self.detected_blocks = len(block_obs_list)
         
 
     def hand_cam_info_callback(self, data):
@@ -641,19 +618,27 @@ class BlockFinder():
     def ir_callback(self, data):
         self.ir_reading = data.range
         #rospy.loginfo("IR reading: %f", self.ir_reading)
+
         if(self.ir_reading > 65):
             #rospy.loginfo("Invalid IR reading")
             self.ir_reading = 0.4
 
+# TODO: Need to improve this checking...
 def calc_block_type(block_ratio):
+    if(block_ratio <= 0.4):
+        rospy
     if(block_ratio > 0.5 and block_ratio <= 1.5):
         block_type = "1x1"
+
     elif(block_ratio > 1.5 and block_ratio <= 2.5):
         block_type = "1x2"
+
     elif(block_ratio > 2.5 and block_ratio <= 3.5):
         block_type = "1x3"
+
     elif(block_ratio > 3.5 and block_ratio <= 4.5):
         block_type = "1x4"
+
     else:
         rospy.loginfo("BLOCK RATIO is %f", block_ratio)
         block_type = "1x1"
@@ -896,35 +881,24 @@ def main():
 
     rospy.init_node('block_finder' + 'camera_name')
 
-
     block_finder = BlockFinder(camera_name)
     block_finder.subscribe()
     block_finder.publish()
 
     while not rospy.is_shutdown():
-        print(block_finder.block_poses)
+        if(block_finder.detected_blocks > 0):
+            rospy.loginfo("Publishing block location markers")
 
-        if(len(block_finder.block_poses) > 0):
-            rospy.loginfo("Publishing block location and pixel location")
-            pose_msg = PoseArray()
-            pose_msg.poses = block_finder.block_poses
-            block_finder.pose_pub.publish(pose_msg)
-            block_finder.marker_pub.publish(block_finder.block_markers)
             rospy.loginfo("There are %d block markers", len(block_finder.block_markers.markers))
+            block_finder.marker_pub.publish(block_finder.block_markers)
 
-            # Publish the camera x,y coordinate location of the block
-            #block_finder.block_xy_pub.publish(block_finder.pixel_loc)
-
-            # Publish ray that intersects with camera and object
-            block_finder.ray_marker_pub.publish(block_finder.ray_markers)
+            # Publish ray from camera lens to detected object
             rospy.loginfo("There are %d ray markers", len(block_finder.ray_markers.markers))
+            block_finder.ray_marker_pub.publish(block_finder.ray_markers)
 
-        if(len(block_finder.block_obs) > 0):
             rospy.loginfo("Publishing block observations")
             block_obs_array = BlockObservationArray()
             block_obs_array.observations = block_finder.block_obs
-
-
     
         block_finder.rect_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.rect_seg_img))
         block_finder.red_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["red"]))
@@ -932,6 +906,8 @@ def main():
         block_finder.yellow_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["yellow"]))
         block_finder.blue_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["blue"]))
 
+
+        # TODO: Move this to a separate node that publishes the static transform...
         top_to_base_p_x = block_finder.top_to_base_mat[0, 3]
         top_to_base_p_y = block_finder.top_to_base_mat[1, 3]
         top_to_base_p_z = block_finder.top_to_base_mat[2, 3]
@@ -955,6 +931,9 @@ def main():
                                                             "camera_depth_optical_frame",
                                                             "base"
             )
+
+        # End TODO
+
         # Sleep
         block_finder.pub_rate.sleep()
 

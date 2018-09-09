@@ -2,7 +2,9 @@
 from message_filters import TimeSynchronizer, ApproximateTimeSynchronizer, Subscriber
 from sensor_msgs.msg import Image, CameraInfo
 import rospy
-class ImageSynchronizer:
+
+
+class CameraSynchronizer:
     def __init__(self):
         self.image_sub = Subscriber("/cameras/right_hand_camera/image", Image)
         self.info_sub = Subscriber("/cameras/right_hand_camera/camera_info_std", CameraInfo)
