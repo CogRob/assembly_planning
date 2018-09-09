@@ -1,4 +1,3 @@
-
 cmake_minimum_required(VERSION 2.8.3)
 project(block_mover)
 
@@ -13,6 +12,18 @@ find_package(catkin REQUIRED COMPONENTS
   gazebo_ros
   gazebo_msgs
   visualization_msgs
+)
+
+add_message_files(
+  FILES
+  BlockObservationArray.msg
+  BlockObservation.msg
+)
+
+generate_messages(
+  DEPENDENCIES
+  std_msgs
+  geometry_msgs
 )
 
 catkin_package(
@@ -40,6 +51,7 @@ install(PROGRAMS
    scripts/block_spawner.py
    scripts/camera_controller.py
    scripts/edge_finder.py
+   scripts/state_estimator.py
    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

@@ -14,7 +14,7 @@ from matplotlib import pyplot as plt
 
 from std_msgs.msg import String, Int32
 from sensor_msgs.msg import Image, CameraInfo, Range
-from geometry_msgs.msg import Pose, PoseArray, Point, Quaternion
+from geometry_msgs.msg import Pose, PoseArray, Point, Quaternion, Pose2D
 
 from image_geometry import PinholeCameraModel
 
@@ -22,9 +22,9 @@ from visualization_msgs.msg import Marker, MarkerArray
 
 from cv_bridge import CvBridge
 import tf
+from block_mover.msg import BlockObservation, BlockObservationArray
 
 #import baxter_interface
-
 if(str.startswith(cv2.__version__, '3')):
     print("!!!")
     OPENCV3 = True
@@ -305,6 +305,11 @@ class BlockFinder():
         self.top_to_base_mat = self.top_to_base_mat + R
         print(self.top_to_base_mat)
 
+        if(self.camera == "top"):
+            self.transparency = 1.
+        elif(self.camera == "right_hand"):
+            self.transparency = 0.5
+
         """
         self.top_to_base_mat = np.array(
                 [
@@ -330,6 +335,8 @@ class BlockFinder():
         # TODO: Tune!
         self.top_cam_table_dist = 1.33
 
+        self.block_obs = []
+
     def publish(self):
         self.pose_pub           = rospy.Publisher("block_finder/" + self.camera + "/block_poses", PoseArray, queue_size=1)
         #self.block_xy_pub             = rospy.Publisher("block_finder/" + self.camera + "/block_xy", Point, queue_size=1)
@@ -339,7 +346,10 @@ class BlockFinder():
         self.green_seg_img_pub  = rospy.Publisher("block_finder/" + self.camera + "/green_segmented_image", Image, queue_size=1)
         self.rect_seg_img_pub   = rospy.Publisher("block_finder/" + self.camera + "/rect_segmented_image", Image, queue_size=1)
         self.marker_pub         = rospy.Publisher("block_finder/" + self.camera + "/block_markers", MarkerArray, queue_size=1)
-        self.ray_marker_pub     = rospy.Publisher("block_finder/image_rays", MarkerArray, queue_size=20)
+        self.ray_marker_pub     = rospy.Publisher("block_finder/" + self.camera + "/image_rays", MarkerArray, queue_size=1)
+
+        self.block_obs_pub      = rospy.Publisher("block_finder/" + self.camera + "/block_obs", BlockObservationArray, queue_size=1)
+
 
     def subscribe(self):
         if(self.camera == "right_hand"):
@@ -351,8 +361,9 @@ class BlockFinder():
             # The camera above the table
             self.top_cam_sub    = rospy.Subscriber("/camera/rgb/image_rect_color", Image, self.top_cam_callback)
             self.top_cam_info_sub       = rospy.Subscriber("/camera/rgb/camera_info", CameraInfo, self.top_cam_info_callback)
-        
 
+
+        
     def hand_cam_callback(self, data):
         cv_image = self.bridge.imgmsg_to_cv2(data)
 
@@ -370,6 +381,7 @@ class BlockFinder():
         block_pose_list = []
         block_marker_list = MarkerArray()
         ray_marker_list = MarkerArray()
+        block_obs_list = []
         
         # Mask cv_image to remove baxter's grippers
 
@@ -389,8 +401,11 @@ class BlockFinder():
         # Find table
 
 
-        if(self.camera == "hand_camera"):
-            area_threshold = 180 / self.ir_reading
+        if(self.camera == "right_hand"):
+            if(self.ir_reading != None):
+                area_threshold = 180 / self.ir_reading
+            else:
+                area_threshold = 180 / 0.4
         elif(self.camera == "top"):
             area_threshold = 100
             
@@ -564,7 +579,8 @@ class BlockFinder():
                                                 id=ray_id,
                                                 point1=Point(ray_pt_1_tf[0], ray_pt_1_tf[1], ray_pt_1_tf[2]),
                                                 point2=Point(ray_pt_2_tf[0], ray_pt_2_tf[1], ray_pt_2_tf[2]),
-                                                ray_color=color
+                                                ray_color=color,
+                                                transparency = self.transparency
                                             )
                             )
 
@@ -588,11 +604,15 @@ class BlockFinder():
                             block_orientation.w = block_orientation_arr[3]
 
                             # Create a marker to visualize in RVIZ 
-                            curr_marker = create_block_marker(frame = "base", id = len(block_marker_list.markers), position = block_position_p, orientation=block_orientation, block_type=block_type, block_color = color, transparency = 1)
+                            curr_marker = create_block_marker(frame = "base", id = len(block_marker_list.markers), position = block_position_p, orientation=block_orientation, block_type=block_type, block_color = color, transparency = self.transparency)
 
                             rospy.loginfo("Adding new marker and block pose!")
                             block_marker_list.markers.append(curr_marker)
                             block_pose_list.append(Pose(position=block_position_p, orientation=block_orientation))
+
+                            # TODO: The block angle will still be wrong. Need to transform it from the camera coordinate to the world frame
+                            block_obs_list.append(BlockObservation(pose = Pose2D(x = block_position_p.x, y = block_position_p.y, theta = block_angle), color=color))
+
                         else:
                             rospy.loginfo("No ir_data has been recieved yet!")
                     else:
@@ -605,6 +625,7 @@ class BlockFinder():
         self.block_poses = block_pose_list        
         self.ray_markers = ray_marker_list
         self.block_markers = block_marker_list
+        self.block_obs = block_obs_list
         
 
     def hand_cam_info_callback(self, data):
@@ -813,7 +834,7 @@ def create_block_marker(frame, id, position, orientation, block_type, block_colo
     return curr_marker
 
 
-def create_ray_marker(frame, id, point1, point2, ray_color):
+def create_ray_marker(frame, id, point1, point2, ray_color, transparency = 1):
     curr_marker = Marker()
     curr_marker.header.frame_id = frame
     
@@ -864,17 +885,16 @@ def create_ray_marker(frame, id, point1, point2, ray_color):
     curr_marker.points = points_list
     
     # Alpha value (transparency)
-    curr_marker.color.a = 1
+    curr_marker.color.a = transparency
 
     curr_marker.lifetime = rospy.Duration(0)
 
     return curr_marker
 
-
 def main():
     camera_name = sys.argv[1]
 
-    rospy.init_node('block_finder')
+    rospy.init_node('block_finder' + 'camera_name')
 
 
     block_finder = BlockFinder(camera_name)
@@ -898,6 +918,13 @@ def main():
             # Publish ray that intersects with camera and object
             block_finder.ray_marker_pub.publish(block_finder.ray_markers)
             rospy.loginfo("There are %d ray markers", len(block_finder.ray_markers.markers))
+
+        if(len(block_finder.block_obs) > 0):
+            rospy.loginfo("Publishing block observations")
+            block_obs_array = BlockObservationArray()
+            block_obs_array.observations = block_finder.block_obs
+
+
     
         block_finder.rect_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.rect_seg_img))
         block_finder.red_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["red"]))
@@ -913,6 +940,7 @@ def main():
         top_to_base_q = tf.transformations.quaternion_from_matrix(block_finder.top_to_base_mat)
 
         print("Type of top_to_base_q: ", type(top_to_base_q))
+
         if(block_finder.camera == "top"):
             block_finder.top_cam_to_base_tf_br.sendTransform(top_to_base_p_tuple,
                                                             top_to_base_q,
