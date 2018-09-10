@@ -281,32 +281,20 @@ class BlockFinder():
         self.object_height = 0.1
         self.bridge = CvBridge()
         self.ir_reading = None
-        self.top_cam_to_base_tf_br = tf.TransformBroadcaster()
-
-        # Move this to other ros node
-        ## TO MOVE
-        orig_x = -0.09
-        orig_y = -0.7468147
-        orig_z = 1.22
-
-        yaw = 180.
-        pitch = 0
-        roll = 80
-
-        self.top_to_base_mat = np.zeros((4,4))
-        self.top_to_base_mat[0, 3] = -orig_y
-        self.top_to_base_mat[1, 3] = -orig_x
-        self.top_to_base_mat[2, 3] = orig_z
-
-        R = tf.transformations.euler_matrix(math.radians(yaw), math.radians(pitch), math.radians(roll))
-
-        self.top_to_base_mat = self.top_to_base_mat + R
-        print(self.top_to_base_mat)
-
-        ## END TO MOVE
 
         if(self.camera == "top"):
             self.transparency = 1.
+
+            try:
+                self.tf_listener = tf.TransformListener()
+                time = rospy.Time(0)
+                self.tf_listener.waitForTransform("/camera_link", "/base", time, rospy.Duration(4.0))
+                (trans,rot) = self.tf_listener.lookupTransform("/camera_link", "/base", time)
+
+                self.top_to_base_mat = tf.transformations.compose_matrix(translate = trans, angles=tf.transformations.euler_from_quaternion(rot))
+            except (tf.LookupException, tf.ConnectivityException):
+                rospy.loginfo("No transform from base to camera available!")
+
         elif(self.camera == "right_hand"):
             self.transparency = 0.5
 
@@ -357,6 +345,7 @@ class BlockFinder():
             self.top_cam_info_sub       = rospy.Subscriber("/camera/rgb/camera_info", CameraInfo, self.top_cam_info_callback)
 
 
+
         
     def hand_cam_callback(self, data):
         cv_image = self.bridge.imgmsg_to_cv2(data)
@@ -401,7 +390,7 @@ class BlockFinder():
             else:
                 area_threshold = 180 / 0.4
         elif(self.camera == "top"):
-            area_threshold = 100
+            area_threshold= 40
             
 
         for color in colors:
@@ -451,8 +440,15 @@ class BlockFinder():
             
             num_obj = len(contours) # number of objects found in current frame
 
+            cv2.circle(cv_image, (319, 255), 198, (255, 255, 0), 1)
 
             for contour in contours:
+                print(contour)
+                x, y, w, h = cv2.boundingRect(contour)
+
+                if(x < 120 or x > 500 or y < 55 or y > 455):
+                    continue
+                
                 area = cv2.contourArea(contour)
                 
                 if(area > area_threshold):
@@ -470,13 +466,19 @@ class BlockFinder():
                         box = cv2.cv.BoxPoints(rect)
 
                     box = np.int0(box)
+
                     cv2.drawContours(cv_image, [box], 0, color_vals[color] , 2)
 
 
-                    x, y, w, h = cv2.boundingRect(contour)
+
                     cropped_img = masked_img[y-5:y+h+5, x-5:x+w+5]
 
+                    if(self.camera == "top"):
+                        cropped_img = np.flip(cropped_img, 0)
+                    
                     block_angle = calc_angle(cropped_img)
+
+
                     block_ratio = calc_ratio(rect[1][1], rect[1][0])
 
                     block_type = calc_block_type(block_ratio)
@@ -513,8 +515,15 @@ class BlockFinder():
                         
                         if(self.camera == "right_hand"):
                             vec = np.array(self.hand_camera_model.projectPixelTo3dRay((cx, cy)))
+
+                        
                         elif(self.camera == "top"):
                             vec = np.array(self.top_camera_model.projectPixelTo3dRay((cx, cy)))
+                            new_vec = vec.copy()
+                            new_vec[0] = vec[2]
+                            new_vec[1] = -vec[0]
+                            new_vec[2] = -vec[1]
+                            vec = new_vec.copy()
 
                         else:
                             # Invalid camera name
@@ -528,7 +537,7 @@ class BlockFinder():
                             elif(self.camera =="top"):
                                 d = self.top_cam_table_dist
 
-                            ray_pt_1 = 0 * vec
+                            ray_pt_1 = np.array([0,0,0])
                             ray_pt_2 = 2 * vec
 
                             norm_vec = np.array([0, 0, 1])
@@ -544,6 +553,7 @@ class BlockFinder():
                             d_cam = d * vec
 
                             homog_d_cam = np.concatenate((d_cam, np.ones(1))).reshape((4,1))
+
                             homog_ray_pt_1 = np.concatenate((ray_pt_1, np.ones(1))).reshape((4,1))
                             homog_ray_pt_2 = np.concatenate((ray_pt_2, np.ones(1))).reshape((4,1))  
                             
@@ -557,7 +567,7 @@ class BlockFinder():
 
                                 camera_to_base = tf.transformations.compose_matrix(translate=trans, angles=tf.transformations.euler_from_quaternion(rot))
 
-                            block_position_arr = np.dot(camera_to_base, homog_d_cam)
+                            block_position_arr = np.dot(camera_to_base, homog_d_cam) 
 
                             # Create a ray from the camera to the detected block                            
                             # Transform ray to base frame
@@ -924,13 +934,19 @@ def create_ray_marker(frame, id, point1, point2, ray_color, transparency = 1):
 def main():
     camera_name = sys.argv[1]
 
-    rospy.init_node('block_finder' + 'camera_name')
+    rospy.init_node('block_finder' + camera_name)
 
     block_finder = BlockFinder(camera_name)
     block_finder.subscribe()
     block_finder.publish()
 
     while not rospy.is_shutdown():
+        if(camera_name == "top"):
+            try:
+                (trans,rot) = block_finder.tf_listener.lookupTransform("/base", "/camera_link", rospy.Time(0))
+                block_finder.top_to_base_mat = tf.transformations.compose_matrix(translate = trans, angles=tf.transformations.euler_from_quaternion(rot))
+            except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+                print("No TF from camera to base is available!")
         if(block_finder.detected_blocks > 0):
             rospy.loginfo("Publishing block location markers")
 
@@ -952,32 +968,6 @@ def main():
         block_finder.green_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["green"]))
         block_finder.yellow_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["yellow"]))
         block_finder.blue_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["blue"]))
-
-
-        # TODO: Move this to a separate node that publishes the static transform...
-        top_to_base_p_x = block_finder.top_to_base_mat[0, 3]
-        top_to_base_p_y = block_finder.top_to_base_mat[1, 3]
-        top_to_base_p_z = block_finder.top_to_base_mat[2, 3]
-        top_to_base_p_tuple = (top_to_base_p_x, top_to_base_p_y, top_to_base_p_z)
-
-        top_to_base_q = tf.transformations.quaternion_from_matrix(block_finder.top_to_base_mat)
-
-        if(block_finder.camera == "top"):
-            block_finder.top_cam_to_base_tf_br.sendTransform(top_to_base_p_tuple,
-                                                            top_to_base_q,
-                                                            rospy.Time.now(),
-                                                            "camera_rgb_optical_frame",
-                                                            "base"
-                                                          
-            )
-            block_finder.top_cam_to_base_tf_br.sendTransform(top_to_base_p_tuple,
-                                                            top_to_base_q,
-                                                            rospy.Time.now(),
-                                                            "camera_depth_optical_frame",
-                                                            "base"
-            )
-
-        # End TODO
 
         # Sleep
         block_finder.pub_rate.sleep()
