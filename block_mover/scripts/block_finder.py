@@ -77,7 +77,7 @@ if(TOP_CAM):
     YEL_HIGH_VAL    = 255
 
 if(HAND_CAM):
-    BLU_LOW_HUE     = 100
+    BLU_LOW_HUE     = 90
     BLU_HIGH_HUE    = 133
     BLU_LOW_SAT     = 117
     BLU_HIGH_SAT    = 255
@@ -180,6 +180,18 @@ color_vals = {
     "teal":   (255, 60, 0)
 }
 
+BLOCK_TYPE_1X1 = 1
+BLOCK_TYPE_1X2 = 2
+BLOCK_TYPE_1X3 = 4
+BLOCK_TYPE_1X4 = 8
+BLOCK_TYPE_2X2 = 16
+
+
+COLOR_RED = 1
+COLOR_GRN = 2
+COLOR_BLU = 4
+
+
 # From https://github.com/botforge/ColorTrackbar
 def nothing(x):
     pass
@@ -252,7 +264,7 @@ def find_hsv_values(img):
 
     # clean up our resources
     cap.release()
-    cv.destroyAllWindows()
+    cv2.destroyAllWindows()
 
 
 class BlockFinder():
@@ -407,13 +419,12 @@ class BlockFinder():
 
                 hsv_mask = hsv_mask_1 | hsv_mask_2
 
-
             else:
                 hsv_mask = cv2.inRange(hsv, np.array([low_h, low_s, low_v]), np.array([high_h, high_s, high_v]))
 
             # Apply mask to original image
             masked_img = cv2.bitwise_and(cv_image, cv_image, mask=hsv_mask)
-            print("Masked image type: ", type(masked_img))
+
             # Store HSV masked image for the current color
             self.seg_img[color] = masked_img.copy()
             #cv2.imshow(color, masked_img)
@@ -431,6 +442,7 @@ class BlockFinder():
             ret, thresh = cv2.threshold(erode_2,157,255,0)
             if(OPENCV3):
                 im2, contours, hierarchy = cv2.findContours(thresh,cv2.RETR_TREE,cv2.CHAIN_APPROX_NONE)
+
             else:
                 contours, hierarchy = cv2.findContours(thresh,cv2.RETR_TREE,cv2.CHAIN_APPROX_NONE)
 
@@ -443,13 +455,14 @@ class BlockFinder():
             for contour in contours:
                 area = cv2.contourArea(contour)
                 
-                
                 if(area > area_threshold):
                     
                     rospy.loginfo("AREA: %f", area)
                     rect = cv2.minAreaRect(contour)
+
                     print(rect[1][0])
                     print(rect[1][1])
+
                     if(OPENCV3):
                         box = cv2.boxPoints(rect)
                     
@@ -464,7 +477,7 @@ class BlockFinder():
                     cropped_img = masked_img[y-5:y+h+5, x-5:x+w+5]
 
                     block_angle = calc_angle(cropped_img)
-                    block_ratio = calc_ratio(box[1][1], box[1][0])
+                    block_ratio = calc_ratio(rect[1][1], rect[1][0])
 
                     block_type = calc_block_type(block_ratio)
 
@@ -494,7 +507,7 @@ class BlockFinder():
                             font_size = 3.0
                             font_thickness = 2 
 
-                        cv2.putText(cv_image,block_type,(cx,cy), font, font_size, color_vals[color], font_thickness)
+                        cv2.putText(cv_image,block_type_string(block_type),(cx,cy), font, font_size, color_vals[color], font_thickness)
 
                         self.pixel_loc = [cx, cy]
                         
@@ -502,6 +515,7 @@ class BlockFinder():
                             vec = np.array(self.hand_camera_model.projectPixelTo3dRay((cx, cy)))
                         elif(self.camera == "top"):
                             vec = np.array(self.top_camera_model.projectPixelTo3dRay((cx, cy)))
+
                         else:
                             # Invalid camera name
                             rospy.loginfo("The camera name you passed to find blocks is invalid!")
@@ -548,6 +562,7 @@ class BlockFinder():
                             # Create a ray from the camera to the detected block                            
                             # Transform ray to base frame
                             ray_pt_1_tf = np.dot(camera_to_base, homog_ray_pt_1)
+
                             ray_pt_2_tf = np.dot(camera_to_base, homog_ray_pt_2)
 
                             ray_marker_list.markers.append(create_ray_marker(
@@ -562,6 +577,7 @@ class BlockFinder():
 
                             ray_id += 1
                             rospy.loginfo("Block position: %f, %f, %f", block_position_arr[0], block_position_arr[1], block_position_arr[2])
+                            rospy.loginfo("Block type: %s", block_type)
 
                             block_position_p = Point()
                             block_position_arr_copy = block_position_arr.copy()
@@ -587,7 +603,7 @@ class BlockFinder():
                             block_pose_list.append(Pose(position=block_position_p, orientation=block_orientation))
 
                             # TODO: The block angle will still be wrong. Need to transform it from the camera coordinate to the world frame
-                            block_obs_list.append(BlockObservation(pose = Pose2D(x = block_position_p.x, y = block_position_p.y, theta = block_angle), color=color))
+                            block_obs_list.append(BlockObservation(pose = Pose2D(x = block_position_p.x, y = block_position_p.y, theta=block_angle), color=color_to_int(color), dim=block_type))
 
                         else:
                             rospy.loginfo("No ir_data has been recieved yet!")
@@ -623,25 +639,54 @@ class BlockFinder():
             #rospy.loginfo("Invalid IR reading")
             self.ir_reading = 0.4
 
+def block_type_string(block_type):
+    if(block_type == BLOCK_TYPE_1X1):
+        return "1X1"
+    elif(block_type == BLOCK_TYPE_1X2):
+        return "1X2"
+    elif(block_type == BLOCK_TYPE_1X3):
+        return "1X3"
+    elif(block_type == BLOCK_TYPE_1X4):
+        return "1X4"
+    elif(block_type == BLOCK_TYPE_2X2):
+        return "2X2"
+
+
+def color_to_int(color):
+    if color == "red":
+        return COLOR_RED
+
+    elif color == "green":
+        return COLOR_GRN
+    elif color == "blue":
+        return COLOR_BLU
+
+def find_ray_plane_intersection(ray):
+    # Table plane  
+    table_height = -0.1 # In baxter base reference frame
+
+    table_normal = np.array([0, 0, 1])
+    plane_point  = np.array([0, 0, -0.1])
+
 # TODO: Need to improve this checking...
 def calc_block_type(block_ratio):
     if(block_ratio <= 0.4):
         rospy
     if(block_ratio > 0.5 and block_ratio <= 1.5):
-        block_type = "1x1"
+        block_type = BLOCK_TYPE_1X1
 
     elif(block_ratio > 1.5 and block_ratio <= 2.5):
-        block_type = "1x2"
+        block_type = BLOCK_TYPE_1X2
 
     elif(block_ratio > 2.5 and block_ratio <= 3.5):
-        block_type = "1x3"
+        block_type = BLOCK_TYPE_1X3
 
     elif(block_ratio > 3.5 and block_ratio <= 4.5):
-        block_type = "1x4"
+        block_type = BLOCK_TYPE_1X4
 
     else:
         rospy.loginfo("BLOCK RATIO is %f", block_ratio)
-        block_type = "1x1"
+        block_type = BLOCK_TYPE_1X1
 
     return block_type
 def generate_gripper_mask(hand_cam_image):
@@ -767,19 +812,19 @@ def create_block_marker(frame, id, position, orientation, block_type, block_colo
    
     single_unit_dim = 0.03
 
-    if(block_type == "1x1"):
+    if(block_type == BLOCK_TYPE_1X1):
         curr_marker.scale.x = single_unit_dim
         curr_marker.scale.y = single_unit_dim
         curr_marker.scale.z = single_unit_dim
-    elif(block_type == "1x2"):
+    elif(block_type == BLOCK_TYPE_1X2):
         curr_marker.scale.x = single_unit_dim
         curr_marker.scale.y = 2*single_unit_dim 
         curr_marker.scale.z = single_unit_dim 
-    elif(block_type == "1x3"):
+    elif(block_type == BLOCK_TYPE_1X3):
         curr_marker.scale.x = single_unit_dim 
         curr_marker.scale.y = 3 *single_unit_dim
         curr_marker.scale.z = single_unit_dim
-    elif(block_type == "1x4"):
+    elif(block_type == BLOCK_TYPE_1X4):
         curr_marker.scale.x = single_unit_dim 
         curr_marker.scale.y = 4 *single_unit_dim
         curr_marker.scale.z = single_unit_dim
@@ -899,6 +944,8 @@ def main():
             rospy.loginfo("Publishing block observations")
             block_obs_array = BlockObservationArray()
             block_obs_array.observations = block_finder.block_obs
+
+            block_finder.block_obs_pub.publish(block_obs_array)
     
         block_finder.rect_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.rect_seg_img))
         block_finder.red_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["red"]))
@@ -914,8 +961,6 @@ def main():
         top_to_base_p_tuple = (top_to_base_p_x, top_to_base_p_y, top_to_base_p_z)
 
         top_to_base_q = tf.transformations.quaternion_from_matrix(block_finder.top_to_base_mat)
-
-        print("Type of top_to_base_q: ", type(top_to_base_q))
 
         if(block_finder.camera == "top"):
             block_finder.top_cam_to_base_tf_br.sendTransform(top_to_base_p_tuple,
