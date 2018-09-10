@@ -170,11 +170,13 @@ block_list_1 = [
     Block(color="grn", dim="1X2", height="T", num=0),
     Block(color="grn", dim="1X4", height="T", num=0),
 ]
+
 map_resolution = 0.001
 
 class StateEstimator():
     def __init__(self, table_diameter=1.2, map_resolution = map_resolution, block_list=block_list_1):
         self.map_resolution = map_resolution
+
         self.map_height = int(table_diameter / self.map_resolution)
         self.map_width  = int(table_diameter / self.map_resolution)
 
@@ -220,13 +222,14 @@ class StateEstimator():
         self.update_occup_map(data.observations, "right_hand")
 
     def update_occup_map(self, observations, camera):
+
         for obs in observations:
             # We are only using 1 of each block and tall blocks, so height and num are defaulted
             new_block = Block(color=color_int_to_str(obs.color), dim=dim_int_to_str(obs.dim), num=0, height="T")
 
             block_hash = new_block.hash_block()
 
-            pose_grid = pose_to_grid(obs.pose)
+            pose_grid = pose_to_grid(obs.pose, self.map_height, self.map_resolution)
 
             if(camera == "top"):
                 if(block_hash in self.occupancy_grid_top):
@@ -236,6 +239,7 @@ class StateEstimator():
             elif(camera == "right_hand"):
                 if(block_hash in self.occupancy_grid_right_hand):
                     self.occupancy_grid_right_hand[block_hash][pose_grid.x, pose_grid.y] += 1
+
                 else:
                     print("Key not in dictionary!")
             else:
@@ -252,7 +256,6 @@ class StateEstimator():
         display_map = np.zeros((self.map_width, self.map_height, 3), dtype=np.uint8)
 
         for key in occupancy_grid:
-            
             # plt.subplot(3, 3, i)
             curr_occ = occupancy_grid[key]
             # Find max value of curr_occ
@@ -282,8 +285,6 @@ class StateEstimator():
                 #print("Max of", max_val," at ", max_index)
                 #print(occupancy_grid[key])
 
-        display_map = np.flip(display_map, 1)
-        #display_map = np.flip(display_map, 0)
 
         if(camera == "top"):
             self.display_map_top = display_map
@@ -298,9 +299,9 @@ class StateEstimator():
         plt.show()
         """
 
-def pose_to_grid(pose):
-    grid_x = int(pose.x / map_resolution)
-    grid_y = int((pose.y + .6) / map_resolution)
+def pose_to_grid(pose, map_dim, map_resolution):
+    grid_y = map_dim - int(pose.x / map_resolution)
+    grid_x = int(pose.y / map_resolution + map_dim / 2)
 
     print("Converted ", pose.x, pose.y," to ",  grid_x, grid_y)
 

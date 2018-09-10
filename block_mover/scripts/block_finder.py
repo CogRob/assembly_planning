@@ -386,12 +386,15 @@ class BlockFinder():
 
         if(self.camera == "right_hand"):
             if(self.ir_reading != None):
-                area_threshold = 180 / self.ir_reading
+                area_min_threshold = 180 / self.ir_reading
+                area_max_threshold = 4000 # TODO: tune
             else:
-                area_threshold = 180 / 0.4
+                area_min_threshold = 180 / 0.4
+                area_max_threshold = 4000 # TODO: tune
+
         elif(self.camera == "top"):
-            area_threshold= 40
-            
+            area_min_threshold= 40
+            area_max_threshold = 200
 
         for color in colors:
             low_h = colors[color]["low_h"]
@@ -446,12 +449,17 @@ class BlockFinder():
                 print(contour)
                 x, y, w, h = cv2.boundingRect(contour)
 
-                if(x < 120 or x > 500 or y < 55 or y > 455):
-                    continue
+                if(self.camera == "top"):
+                    # Block should not be outside of circle centered at 319,255 with radius 200
+                    d = math.sqrt((y - 319)**2 + (x - 255)**2)
+
+                    if(d > 200):
+                        continue
+                        
                 
                 area = cv2.contourArea(contour)
                 
-                if(area > area_threshold):
+                if(area > area_min_threshold and area < area_max_threshold):
                     
                     rospy.loginfo("AREA: %f", area)
                     rect = cv2.minAreaRect(contour)
@@ -485,7 +493,7 @@ class BlockFinder():
 
                     moms = cv2.moments(contour)
 
-                    if moms['m00'] > area_threshold:
+                    if (moms['m00'] > area_min_threshold and moms['m00'] < area_max_threshold):
                         rospy.loginfo("Found %d %s objects", num_obj, color)
                         obj_found = True
                         
