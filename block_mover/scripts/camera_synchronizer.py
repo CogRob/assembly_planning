@@ -28,7 +28,7 @@ class CameraSynchronizer:
         self.info_pub.publish(camerainfo)
 
 def main():
-    im_synch = ImageSynchronizer()
+    im_synch = CameraSynchronizer()
     rospy.init_node('image_synch', anonymous=True)
 
     im_synch.subscribe()

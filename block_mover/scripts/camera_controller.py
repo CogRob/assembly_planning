@@ -316,6 +316,7 @@ class CameraController():
         low_s = 0
         low_v = 0
 
+        # Converting image to HSV format
         hsv_img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
         color = "green"
@@ -327,7 +328,6 @@ class CameraController():
         low_v = colors[color]["low_v"]
         high_v = colors[color]["high_v"]
 
-        #Converting image to HSV format
         if color == "red":
             hsv_mask_1 = cv2.inRange(hsv_img, np.array([low_h[0], low_s, low_v]), np.array([high_h[0], high_s, high_v]))
             hsv_mask_2 = cv2.inRange(hsv_img, np.array([low_h[1], low_s, low_v]), np.array([high_h[1], high_s, high_v]))
@@ -354,8 +354,8 @@ class CameraController():
 
         im2, contours, hierarchy = cv2.findContours(thresh,cv2.RETR_TREE,cv2.CHAIN_APPROX_NONE)
 
-        #Draw the countours.
-        #cv2.drawContours(cv_image, contours, -1, (0,255,0), 3)
+        # Draw the countours.
+        # cv2.drawContours(cv_image, contours, -1, (0,255,0), 3)
         large_contours = []
 
         rect_img = img.copy()

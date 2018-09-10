@@ -941,6 +941,7 @@ def main():
             rospy.loginfo("There are %d ray markers", len(block_finder.ray_markers.markers))
             block_finder.ray_marker_pub.publish(block_finder.ray_markers)
 
+
             rospy.loginfo("Publishing block observations")
             block_obs_array = BlockObservationArray()
             block_obs_array.observations = block_finder.block_obs
@@ -948,17 +949,24 @@ def main():
             block_finder.block_obs_pub.publish(block_obs_array)
     
         block_finder.rect_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.rect_seg_img))
+
         block_finder.red_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["red"]))
+
         block_finder.green_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["green"]))
+
         block_finder.yellow_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["yellow"]))
+
         block_finder.blue_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["blue"]))
 
 
-        # TODO: Move this to a separate node that publishes the static transform...
+
+        # TODO: Move this to a separate node that publishes the static tr
+
         top_to_base_p_x = block_finder.top_to_base_mat[0, 3]
         top_to_base_p_y = block_finder.top_to_base_mat[1, 3]
         top_to_base_p_z = block_finder.top_to_base_mat[2, 3]
         top_to_base_p_tuple = (top_to_base_p_x, top_to_base_p_y, top_to_base_p_z)
+
 
         top_to_base_q = tf.transformations.quaternion_from_matrix(block_finder.top_to_base_mat)
 
