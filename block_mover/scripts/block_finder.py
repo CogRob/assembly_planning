@@ -41,33 +41,33 @@ TUNE_HSV_VALS = False
 if(TOP_CAM):
     BLU_LOW_HUE     = 106
     BLU_HIGH_HUE    = 115
-    BLU_LOW_SAT     = 160
+    BLU_LOW_SAT     = 25
     BLU_HIGH_SAT    = 255
     BLU_LOW_VAL     = 127
     BLU_HIGH_VAL    = 255
 
-    GRN_LOW_HUE     = 39
-    GRN_HIGH_HUE    = 72
-    GRN_LOW_SAT     = 34
+    GRN_LOW_HUE     = 30
+    GRN_HIGH_HUE    = 75
+    GRN_LOW_SAT     = 15
     GRN_HIGH_SAT    = 255
-    GRN_LOW_VAL     = 85
+    GRN_LOW_VAL     = 40
     GRN_HIGH_VAL    = 255
 
     TEAL_LOW_HUE     = 90
     TEAL_HIGH_HUE    = 104
-    TEAL_LOW_SAT     = 97
+    TEAL_LOW_SAT     = 9
     TEAL_HIGH_SAT    = 201
     TEAL_LOW_VAL     = 42
     TEAL_HIGH_VAL    = 255
 
     RED_LOW_HUE_1     = 0
-    RED_HIGH_HUE_1    = 37
-    RED_LOW_HUE_2     = 160
-    RED_HIGH_HUE_2    = 180
-    RED_LOW_SAT     = 120
+    RED_HIGH_HUE_1    = 40
+    RED_LOW_HUE_2     = 130
+    RED_HIGH_HUE_2    = 180 
+    RED_LOW_SAT     = 25
     RED_HIGH_SAT    = 255
     RED_LOW_VAL     = 0
-    RED_HIGH_VAL    = 180
+    RED_HIGH_VAL    = 255
 
     YEL_LOW_HUE     = 4
     YEL_HIGH_HUE    = 38
@@ -75,6 +75,14 @@ if(TOP_CAM):
     YEL_HIGH_SAT    = 255
     YEL_LOW_VAL     = 182
     YEL_HIGH_VAL    = 255
+
+    TBL_LOW_HUE     = 19
+    TBL_HIGH_HUE    = 33
+    TBL_LOW_SAT     = 0
+    TBL_HIGH_SAT    = 255
+    TBL_LOW_VAL     = 0
+    TBL_HIGH_VAL    = 255
+
 
 if(HAND_CAM):
     BLU_LOW_HUE     = 90
@@ -375,7 +383,11 @@ class BlockFinder():
         low_s = 0
         low_v = 0
 
-        hsv = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
+        if(self.camera == "top"):        
+            # Remove table from hsv image
+            hsv = remove_table(cv_image)
+        else: 
+            hsv = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
 
         images = [hsv, hsv, hsv, hsv, hsv]
         i = 0
@@ -394,7 +406,7 @@ class BlockFinder():
 
         elif(self.camera == "top"):
             area_min_threshold= 40
-            area_max_threshold = 200
+            area_max_threshold = 1000
 
         for color in colors:
             low_h = colors[color]["low_h"]
@@ -426,7 +438,7 @@ class BlockFinder():
             dilate_1 = cv2.dilate(erode_1, np.ones((5,5), np.uint8), iterations=1)
 
             #Morphological closing (fill small holes in the foreground)
-            dilate_2 = cv2.dilate(dilate_1, np.ones((10,10), np.uint8), iterations=1)
+            dilate_2 = cv2.dilate(dilate_1, np.ones((10, 10), np.uint8), iterations=1)
             erode_2 = cv2.erode(dilate_2, np.ones((10,10), np.uint8), iterations=1)
 
             images[i] = erode_2.copy()
@@ -445,27 +457,29 @@ class BlockFinder():
 
             cv2.circle(cv_image, (319, 255), 198, (255, 255, 0), 1)
 
+            rospy.loginfo("Found %d %s objects", num_obj, color)
+
             for contour in contours:
-                print(contour)
-                x, y, w, h = cv2.boundingRect(contour)
+
+                moms = cv2.moments(contour)
+                cx = int(moms['m10']/moms['m00'])
+                cy = int(moms['m01']/moms['m00'])
 
                 if(self.camera == "top"):
                     # Block should not be outside of circle centered at 319,255 with radius 200
-                    d = math.sqrt((y - 319)**2 + (x - 255)**2)
+                    d = math.sqrt((cx - 319)**2 + (cy - 255)**2)
 
-                    if(d > 200):
+                    if(d > 198):
                         continue
                         
-                
                 area = cv2.contourArea(contour)
                 
                 if(area > area_min_threshold and area < area_max_threshold):
-                    
-                    rospy.loginfo("AREA: %f", area)
+                    x, y, w, h = cv2.boundingRect(contour)
                     rect = cv2.minAreaRect(contour)
+                    
+                    #rospy.loginfo("AREA: %f", area)
 
-                    print(rect[1][0])
-                    print(rect[1][1])
 
                     if(OPENCV3):
                         box = cv2.boxPoints(rect)
@@ -491,14 +505,10 @@ class BlockFinder():
 
                     block_type = calc_block_type(block_ratio)
 
-                    moms = cv2.moments(contour)
 
                     if (moms['m00'] > area_min_threshold and moms['m00'] < area_max_threshold):
-                        rospy.loginfo("Found %d %s objects", num_obj, color)
                         obj_found = True
                         
-                        cx = int(moms['m10']/moms['m00'])
-                        cy = int(moms['m01']/moms['m00'])
 
                         # print 'cx = ', cx
                         # print 'cy = ', cy
@@ -595,7 +605,7 @@ class BlockFinder():
 
                             ray_id += 1
                             rospy.loginfo("Block position: %f, %f, %f", block_position_arr[0], block_position_arr[1], block_position_arr[2])
-                            rospy.loginfo("Block type: %s", block_type)
+                            rospy.loginfo("Block type: %s", block_type_string(block_type))
 
                             block_position_p = Point()
                             block_position_arr_copy = block_position_arr.copy()
@@ -616,7 +626,7 @@ class BlockFinder():
                             # Create a marker to visualize in RVIZ 
                             curr_marker = create_block_marker(frame = "base", id = len(block_marker_list.markers), position = block_position_p, orientation=block_orientation, block_type=block_type, block_color = color, transparency = self.transparency)
 
-                            rospy.loginfo("Adding new marker and block pose!")
+                            #rospy.loginfo("Adding new marker and block pose!")
                             block_marker_list.markers.append(curr_marker)
                             block_pose_list.append(Pose(position=block_position_p, orientation=block_orientation))
 
@@ -656,6 +666,22 @@ class BlockFinder():
         if(self.ir_reading > 65):
             #rospy.loginfo("Invalid IR reading")
             self.ir_reading = 0.4
+def remove_table(cv_image):
+    hsv = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
+    hsv_mask = cv2.inRange(hsv, np.array([TBL_LOW_HUE, TBL_LOW_SAT, TBL_LOW_VAL]), np.array([TBL_HIGH_HUE, TBL_HIGH_SAT, TBL_HIGH_VAL]))
+    hsv_mask = 255 - hsv_mask
+
+    #print(hsv_mask)
+    # Apply mask to original image
+    hsv = cv2.bitwise_and(hsv, hsv, mask=hsv_mask)
+
+    #plt.imshow(cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB))
+    #plt.show()
+
+
+    return hsv
+
+
 
 def block_type_string(block_type):
     if(block_type == BLOCK_TYPE_1X1):
@@ -880,6 +906,7 @@ def create_block_marker(frame, id, position, orientation, block_type, block_colo
     curr_marker.lifetime = rospy.Duration(0)
 
     return curr_marker
+
 
 
 def create_ray_marker(frame, id, point1, point2, ray_color, transparency = 1):
