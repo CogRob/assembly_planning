@@ -399,10 +399,10 @@ class BlockFinder():
         if(self.camera == "right_hand"):
             if(self.ir_reading != None):
                 area_min_threshold = 180 / self.ir_reading
-                area_max_threshold = 4000 # TODO: tune
+                area_max_threshold = 10000 # TODO: tune
             else:
                 area_min_threshold = 180 / 0.4
-                area_max_threshold = 4000 # TODO: tune
+                area_max_threshold = 10000 # TODO: tune
 
         elif(self.camera == "top"):
             area_min_threshold= 40
@@ -460,7 +460,6 @@ class BlockFinder():
             rospy.loginfo("Found %d %s objects", num_obj, color)
 
             for contour in contours:
-
                 moms = cv2.moments(contour)
                 cx = int(moms['m10']/moms['m00'])
                 cy = int(moms['m01']/moms['m00'])
@@ -995,7 +994,7 @@ def main():
 
             rospy.loginfo("Publishing block observations")
             block_obs_array = BlockObservationArray()
-            block_obs_array.observations = block_finder.block_obs
+            block_obs_array.inv_obs = block_finder.block_obs
 
             block_finder.block_obs_pub.publish(block_obs_array)
     

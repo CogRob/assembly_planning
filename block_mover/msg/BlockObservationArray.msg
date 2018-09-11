@@ -1,2 +1,3 @@
 std_msgs/Header Header
-BlockObservation[] observations
+BlockObservation[] inv_obs
+BlockObservation[] ws_obs
