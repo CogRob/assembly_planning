@@ -15,6 +15,11 @@ from baxter_core_msgs.srv import SolvePositionIK, SolvePositionIKRequest
 from geometry_msgs.msg import Pose, PoseStamped, Quaternion
 from std_msgs.msg import Header
 import networkx as nx
+import tf
+import numpy as np
+
+from block_mover.msg import BlockObservationArray, BlockObservation
+
 
 from metareasoning_agent.knowledge_base import Block, PrimitiveActions
 from metareasoning_agent.utilities import print_pose, calculate_pose_diff
@@ -34,23 +39,24 @@ class EnvState(object):
 
     def __init__(self):
         self._block_cnt = 0
-        self.state = nx.Graph()
+        self.ws_state = nx.Graph()
+
+        self.inv_state = []
 
     def add_block(self, block_type, block_pose):
         """Method to add a new block as a node to the EnvState graph"""
-        self._env.add_node(
+        self.state.add_node(
             self._block_cnt + 1, bType=block_type, bPose=block_pose)
         self._block_cnt += 1
-        self._update_edges()
+        #self._update_edges()
 
     def _update_edges(self):
         """Method to update edges to the latest block added"""
         base_node_pose = self.env.nodes[self._block_cnt - 1]['bPose']
         for idx in range(0, self._block_cnt - 1):
-            target_node_pose = self.env.nodes[idx]['bPose']
+            target_node_pose = self.state.nodes[idx]['bPose']
             pose_diff = calculate_pose_diff(base_node_pose, target_node_pose)
-            self.env.add_edge(self._block_cnt - 1, idx, object=pose_diff)
-
+            self.state.add_edge(self._block_cnt - 1, idx, object=pose_diff)
 
 class Agent(object):
     """
@@ -107,6 +113,7 @@ class Agent(object):
             y=0.791057775248707,
             z=-0.05036074624150949,
             w=0.023309059416570962)
+
         # x=-0.0249590815779,
         # y=0.999649402929,
         # z=0.00737916180073,
@@ -127,6 +134,55 @@ class Agent(object):
         # move to starting position
         self.move_to_start(self._start_angles)
 
+    def update_block_locations(self):
+        rospy.loginfo("Updating block locations. Waiting for BlockObservationArray....")
+
+        block_obs_msg = rospy.wait_for_message("/block_finder/top/block_obs", BlockObservationArray)
+
+        rospy.loginfo("Updating block locations. Waiting for BlockObservationArray....")
+        block_locations = []
+
+        rospy.loginfo("Received %d block observations", len(block_obs_msg.inv_obs))
+        
+        for block_obs in block_obs_msg.inv_obs:
+            if(block_obs.dim == 1):
+                length = 1
+                width = 1
+            elif(block_obs.dim == 2):
+                length = 2
+                width = 1
+            elif(block_obs.dim == 4):
+                length = 3
+                width = 1
+            elif(block_obs.dim == 8):
+                length = 4
+                width = 1
+            elif(block_obs.dim == 16):
+                length = 2
+                width = 2
+            else:
+                rospy.logerr("Invalid block type encountered while updating block locations in agent.py")
+                return
+            
+            if(block_obs.color == 1):
+                color = "red"
+            elif(block_obs.color == 2):
+                color = "green"
+            elif(block_obs.color == 4): 
+                color = "blue"
+            else:
+                rospy.logerr("Invalid block color encountered while updating block locations in agent.py")
+                return
+
+            block_locations.append(Block(length=length, width=width, color=color, pose=block_obs.pose))
+
+
+
+        
+
+        self.inv_state = block_locations
+
+
     # BAXTER-specific methods
     def move_to_start(self, start_angles=None):
         """Move to start_angles joint configuration before task execution"""
@@ -142,7 +198,7 @@ class Agent(object):
 
     def ik_request(self, pose):
         """Returns joint angle configuration for desired end-effector pose"""
-
+        rospy.loginfo("Moving to Pos: x:%f, y:%f, z%f", pose.position.x, pose.position.y, pose.position.z)
         hdr = Header(stamp=rospy.Time.now(), frame_id='base')
         ikreq = SolvePositionIKRequest()
         ikreq.pose_stamp.append(PoseStamped(header=hdr, pose=pose))
@@ -151,6 +207,7 @@ class Agent(object):
         except (rospy.ServiceException, rospy.ROSException), exceptn:
             rospy.logerr("Service call failed: %s", (exceptn, ))
             return False
+
         # Check if result valid, and type of seed ultimately used to get solution
         # convert rospy's string representation of uint8[]'s to int's
         resp_seeds = struct.unpack('<%dB' % len(resp.result_type),
@@ -187,11 +244,9 @@ class Agent(object):
 
     def _gripper_open(self):
         self._gripper.open()
-        rospy.sleep(1.0)
 
     def _gripper_close(self):
         self._gripper.close()
-        rospy.sleep(1.0)
 
     def _servo_to_pose(self, pose):
         # servo down to release
@@ -211,7 +266,29 @@ class Agent(object):
         # TODO: this needs a better servoing approach
         # sort of a loop where we get latest pose from the perception component
         # and then move for nth part of a meter before checking again
+        
         return pose
+
+    def _rotate_gripper(self, angle):
+        # NOTE: angle in radians!
+        q_rot = tf.transformations.quaternion_from_euler(angle, 0, 0)
+        curr_q = self._overhead_orientation
+        curr_q_arr = np.array([curr_q.w, curr_q.x, curr_q.y, curr_q.z])
+
+        q_new = tf.transformations.quaternion_multiply(q_rot, curr_q_arr)
+        
+        current_pose = self._limb.endpoint_pose()
+        ik_pose = Pose()
+        ik_pose.position.x = current_pose['position'].x
+        ik_pose.position.y = current_pose['position'].y
+        ik_pose.position.z = current_pose['position'].z
+        ik_pose.orientation.x = q_new[1]
+        ik_pose.orientation.y = q_new[2]
+        ik_pose.orientation.z = q_new[3]
+        ik_pose.orientation.w = q_new[0]
+
+        joint_angles = self.ik_request(ik_pose)
+        self._guarded_move_to_joint_position(joint_angles)
 
     def _retract(self):
         # retrieve current pose from endpoint

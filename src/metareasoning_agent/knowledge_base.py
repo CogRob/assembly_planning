@@ -20,10 +20,11 @@ class PrimitiveActions(Enum):
 class Block(object):
     """Object for defining blocks in the environment"""
 
-    def __init__(self, length, width, color):
+    def __init__(self, length, width, color, pose):
         self.length = length
         self.width = width
         self.color = color
+        self.pose  = pose
 
     def __eq__(self, other):
         if isinstance(other, Block):
@@ -32,3 +33,7 @@ class Block(object):
             self.width == other.width
         else:
             raise NotImplementedError
+
+
+    def __str__(self):
+        return self.color + "_" + str(self.width) + "x" + str(self.length) + str(self.pose)
