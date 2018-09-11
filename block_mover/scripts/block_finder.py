@@ -387,10 +387,10 @@ class BlockFinder():
         if(self.camera == "right_hand"):
             if(self.ir_reading != None):
                 area_min_threshold = 180 / self.ir_reading
-                area_max_threshold = 4000 # TODO: tune
+                area_max_threshold = 10000 # TODO: tune
             else:
                 area_min_threshold = 180 / 0.4
-                area_max_threshold = 4000 # TODO: tune
+                area_max_threshold = 10000 # TODO: tune
 
         elif(self.camera == "top"):
             area_min_threshold= 40
@@ -446,7 +446,6 @@ class BlockFinder():
             cv2.circle(cv_image, (319, 255), 198, (255, 255, 0), 1)
 
             for contour in contours:
-                print(contour)
                 x, y, w, h = cv2.boundingRect(contour)
 
                 if(self.camera == "top"):
@@ -968,7 +967,7 @@ def main():
 
             rospy.loginfo("Publishing block observations")
             block_obs_array = BlockObservationArray()
-            block_obs_array.observations = block_finder.block_obs
+            block_obs_array.inv_obs = block_finder.block_obs
 
             block_finder.block_obs_pub.publish(block_obs_array)
     
