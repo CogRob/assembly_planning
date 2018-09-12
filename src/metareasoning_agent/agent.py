@@ -16,9 +16,10 @@ from geometry_msgs.msg import Pose, PoseStamped, Quaternion
 from std_msgs.msg import Header
 import networkx as nx
 import tf
+import math
 import numpy as np
 
-from block_mover.msg import BlockObservationArray, BlockObservation
+from block_mover.msg import BlockObservationArray, BlockObservation, BlockPixelLocArray, BlockPixelLoc
 
 
 from metareasoning_agent.knowledge_base import Block, PrimitiveActions
@@ -109,10 +110,11 @@ class Agent(object):
             PrimitiveActions.align: self._align
         }
         self._overhead_orientation = Quaternion(
-            x=-0.609219237389693,
-            y=0.791057775248707,
-            z=-0.05036074624150949,
-            w=0.023309059416570962)
+            x = 0.707,
+            y = 0.707,
+            z = 0.0,
+            w = 0.0
+        )
 
         # x=-0.0249590815779,
         # y=0.999649402929,
@@ -133,6 +135,8 @@ class Agent(object):
 
         # move to starting position
         self.move_to_start(self._start_angles)
+
+        self.curr_pose = None
 
     def update_block_locations(self):
         rospy.loginfo("Updating block locations. Waiting for BlockObservationArray....")
@@ -181,6 +185,9 @@ class Agent(object):
         
 
         self.inv_state = block_locations
+
+    def subscribe(self):
+        hand_cam_pix_sub = rospy.Subscriber("/block_finder/right_hand/block_obs")
 
 
     # BAXTER-specific methods
@@ -262,33 +269,31 @@ class Agent(object):
         joint_angles = self.ik_request(approach)
         self._guarded_move_to_joint_position(joint_angles)
 
-    def _align(self, pose):
+    def _align(self, pose, block_color, block_type):
+
+        # When align gets called, height should be at 0
+
+        #while(True):
+
+
+        # Then, an initial alignment moves the camera until the block is centered in the frame.
+
+
+
+
         # TODO: this needs a better servoing approach
         # sort of a loop where we get latest pose from the perception component
         # and then move for nth part of a meter before checking again
+        """
+        while(pixel_dist < pixel_dist_thresh):
+            pixel_dist = 
+
+        """
+
         
-        return pose
+        #return pose
+        pass
 
-    def _rotate_gripper(self, angle):
-        # NOTE: angle in radians!
-        q_rot = tf.transformations.quaternion_from_euler(angle, 0, 0)
-        curr_q = self._overhead_orientation
-        curr_q_arr = np.array([curr_q.w, curr_q.x, curr_q.y, curr_q.z])
-
-        q_new = tf.transformations.quaternion_multiply(q_rot, curr_q_arr)
-        
-        current_pose = self._limb.endpoint_pose()
-        ik_pose = Pose()
-        ik_pose.position.x = current_pose['position'].x
-        ik_pose.position.y = current_pose['position'].y
-        ik_pose.position.z = current_pose['position'].z
-        ik_pose.orientation.x = q_new[1]
-        ik_pose.orientation.y = q_new[2]
-        ik_pose.orientation.z = q_new[3]
-        ik_pose.orientation.w = q_new[0]
-
-        joint_angles = self.ik_request(ik_pose)
-        self._guarded_move_to_joint_position(joint_angles)
 
     def _retract(self):
         # retrieve current pose from endpoint
@@ -316,6 +321,53 @@ class Agent(object):
         self._gripper_open()
         # retract to clear object
         self._retract()
+
+
+
+    def _rotate_gripper(self, angle):
+        # NOTE: angle in radians!
+        q_rot = tf.transformations.quaternion_from_euler(angle, 0, 0)
+        curr_q = self._overhead_orientation
+        curr_q_arr = np.array([curr_q.w, curr_q.x, curr_q.y, curr_q.z])
+
+        q_new = tf.transformations.quaternion_multiply(q_rot, curr_q_arr)
+        
+        current_pose = self._limb.endpoint_pose()
+        ik_pose = Pose()
+        ik_pose.position.x = current_pose['position'].x
+        ik_pose.position.y = current_pose['position'].y
+        ik_pose.position.z = current_pose['position'].z
+        ik_pose.orientation.x = q_new[1]
+        ik_pose.orientation.y = q_new[2]
+        ik_pose.orientation.z = q_new[3]
+        ik_pose.orientation.w = q_new[0]
+
+        joint_angles = self.ik_request(ik_pose)
+        self._guarded_move_to_joint_position(joint_angles)
+
+
+    def move_camera_in_plane(self, direction, motion_dist=0.005):
+        if(direction is None):
+            return
+
+        rospy.loginfo("Moving camera in plane in direction %f ", math.degrees(direction))
+
+        current_pose = self._limb.endpoint_pose()
+
+        ik_pose = Pose()
+        ik_pose.position.x = current_pose['position'].x + motion_dist*math.cos(direction)
+        ik_pose.position.y = current_pose['position'].y + motion_dist*math.sin(direction)
+        ik_pose.position.z = current_pose['position'].z
+        ik_pose.orientation.x = current_pose['orientation'].x 
+        ik_pose.orientation.y = current_pose['orientation'].y 
+        ik_pose.orientation.z = current_pose['orientation'].z
+        ik_pose.orientation.w = current_pose['orientation'].w
+
+
+        joint_angles = self.ik_request(ik_pose)
+        self._guarded_move_to_joint_position(joint_angles)
+
+        return ik_pose.position.x, ik_pose.position.y, ik_pose.position.z
 
     # PLANNING interface
     def executor(self, action, constraints=None):
