@@ -1,3 +1,4 @@
 geometry_msgs/Pose2D pose
-int8 dim
-int8 color
+int8 length
+int8 width
+string color
