@@ -5,10 +5,9 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   rospack
   baxter_core_msgs
-  baxter_gazebo
-  baxter_interface
-  baxter_tools
-  baxter_tools
+  #baxter_gazebo
+  #baxter_interface
+  #baxter_tools
   gazebo_ros
   gazebo_msgs
   visualization_msgs
@@ -31,10 +30,9 @@ catkin_package(
   rospy
   rospack
   baxter_core_msgs
-  baxter_gazebo
-  baxter_interface
-  baxter_tools
-  baxter_tools
+  #baxter_gazebo
+  #baxter_interface
+  #baxter_tools
   gazebo_ros
   gazebo_msgs
   visualization_msgs
