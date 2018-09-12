@@ -15,17 +15,17 @@ from geometry_msgs.msg import Pose, PoseArray, Point, Quaternion, Pose2D
 from image_geometry import PinholeCameraModel
 from visualization_msgs.msg import Marker, MarkerArray
 from cv_bridge import CvBridge
-from block_mover.msg import BlockObservation, BlockObservationArray
+from block_mover.msg import BlockObservation, BlockObservationArray, BlockPixelLoc, BlockPixelLocArray
 
 #import baxter_interface
 # Check opencv version
 if(str.startswith(cv2.__version__, '3')):
-    print("OpeCV3 detected.")
+    print("OpenCV3 detected.")
     OPENCV3 = True
     TOP_CAM = True
     HAND_CAM = False
 else:
-    print("OpeCV2 detected.")
+    print("OpenCV2 detected.")
     OPENCV3 = False
     TOP_CAM = False
     HAND_CAM = True
@@ -114,7 +114,6 @@ if(HAND_CAM):
     YEL_LOW_VAL     = 182
     YEL_HIGH_VAL    = 255
 
-
 if(SIM):
     BLU_LOW_HUE     = 90
     BLU_HIGH_HUE    = 130
@@ -152,7 +151,6 @@ if(SIM):
     YEL_HIGH_SAT    = 255
     YEL_LOW_VAL     = 0
     YEL_HIGH_VAL    = 255
-
 
 colors = {
         "red":      {   "low_h": [RED_LOW_HUE_1, RED_LOW_HUE_2],   "high_h": [RED_HIGH_HUE_1, RED_HIGH_HUE_2],
@@ -331,7 +329,8 @@ class BlockFinder():
         self.ray_marker_pub     = rospy.Publisher("block_finder/" + self.camera + "/image_rays", MarkerArray, queue_size=1)
 
         # The observations of blocks
-        self.block_obs_pub      = rospy.Publisher("block_finder/" + self.camera + "/block_obs", BlockObservationArray, queue_size=1)
+        self.block_obs_pub      = rospy.Publisher("block_finder/" + self.camera + "/block_obs", BlockObservationArray, queue_size=1) 
+        self.pixel_loc_pub      = rospy.Publisher("block_finder/" + self.camera + "/block_pixel_locs", BlockPixelLocArray, queue_size=1)
 
     def subscribe(self):
         if(self.camera == "right_hand"):
@@ -365,6 +364,7 @@ class BlockFinder():
         block_marker_list = MarkerArray()
         ray_marker_list = MarkerArray()
         block_obs_list = []
+        block_pixel_locs_list = []
         
         # Mask cv_image to remove baxter's grippers
 
@@ -383,14 +383,13 @@ class BlockFinder():
 
         # Find table
 
-
         if(self.camera == "right_hand"):
             if(self.ir_reading != None):
                 area_min_threshold = 180 / self.ir_reading
-                area_max_threshold = 10000 # TODO: tune
+                area_max_threshold = 100000 # TODO: tune
             else:
                 area_min_threshold = 180 / 0.4
-                area_max_threshold = 10000 # TODO: tune
+                area_max_threshold = 100000 # TODO: tune
 
         elif(self.camera == "top"):
             area_min_threshold= 40
@@ -443,7 +442,15 @@ class BlockFinder():
             
             num_obj = len(contours) # number of objects found in current frame
 
-            cv2.circle(cv_image, (319, 255), 198, (255, 255, 0), 1)
+            cv2.circle(cv_image, (320, 200), 5, (255, 255, 0), 1)
+            cv2.circle(cv_image, (340, 20), 5, (0, 255, 255), 1)
+            
+            
+            # At 0 Meters
+            cv2.circle(cv_image, (325, 129), 5, (255, 0, 255), 1)
+
+            # At -0.15 Meters
+            cv2.circle(cv_image, (330, 94), 5, (255, 255, 0), 1)
 
             for contour in contours:
                 x, y, w, h = cv2.boundingRect(contour)
@@ -475,8 +482,6 @@ class BlockFinder():
                     box = np.int0(box)
 
                     cv2.drawContours(cv_image, [box], 0, color_vals[color] , 2)
-
-
 
                     cropped_img = masked_img[y-5:y+h+5, x-5:x+w+5]
 
@@ -621,6 +626,7 @@ class BlockFinder():
 
                             # TODO: The block angle will still be wrong. Need to transform it from the camera coordinate to the world frame
                             block_obs_list.append(BlockObservation(pose = Pose2D(x = block_position_p.x, y = block_position_p.y, theta=block_angle), color=color_to_int(color), dim=block_type))
+                            block_pixel_locs_list.append(BlockPixelLoc(x=cx, y=cy, theta=block_angle, color=color_to_int(color), dim=block_type))
 
                         else:
                             rospy.loginfo("No ir_data has been recieved yet!")
@@ -633,7 +639,9 @@ class BlockFinder():
         self.rect_seg_img = cv_image.copy()
         self.ray_markers = ray_marker_list
         self.block_markers = block_marker_list
+        
         self.block_obs = block_obs_list
+        self.block_pixel_locs = block_pixel_locs_list
 
         self.detected_blocks = len(block_obs_list)
         
@@ -970,6 +978,10 @@ def main():
             block_obs_array.inv_obs = block_finder.block_obs
 
             block_finder.block_obs_pub.publish(block_obs_array)
+
+            block_pixel_locs_array = BlockPixelLocArray()
+            block_pixel_locs_array.pixel_locs = block_finder.block_pixel_locs
+            block_finder.pixel_loc_pub.publish(block_pixel_locs_array)
     
         block_finder.rect_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.rect_seg_img))
 
