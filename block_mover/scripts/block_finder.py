@@ -46,9 +46,10 @@ if(TOP_CAM):
     BLU_LOW_VAL     = 127
     BLU_HIGH_VAL    = 255
 
-    GRN_LOW_HUE     = 33
+    #GRN_LOW_HUE     = 32  # At night...
+    GRN_LOW_HUE     = 45   # During daytime...
     GRN_HIGH_HUE    = 75
-    GRN_LOW_SAT     = 15
+    GRN_LOW_SAT     = 30
     GRN_HIGH_SAT    = 255
     GRN_LOW_VAL     = 40
     GRN_HIGH_VAL    = 255
@@ -61,7 +62,8 @@ if(TOP_CAM):
     TEAL_HIGH_VAL    = 255
 
     RED_LOW_HUE_1     = 0
-    RED_HIGH_HUE_1    = 40
+    #RED_HIGH_HUE_1    = 40 # Night time
+    RED_HIGH_HUE_1    = 20 # Day time
     RED_LOW_HUE_2     = 130
     RED_HIGH_HUE_2    = 180 
     RED_LOW_SAT     = 25
@@ -77,7 +79,8 @@ if(TOP_CAM):
     YEL_HIGH_VAL    = 255
 
     TBL_LOW_HUE     = 19
-    TBL_HIGH_HUE    = 33
+    #TBL_HIGH_HUE    = 32 # At night...
+    TBL_HIGH_HUE    = 45 # During day...
     TBL_LOW_SAT     = 0
     TBL_HIGH_SAT    = 255
     TBL_LOW_VAL     = 0
@@ -505,9 +508,9 @@ class BlockFinder():
                     block_angle = calc_angle(cropped_img)
 
 
-                    block_ratio = calc_ratio(rect[1][1], rect[1][0])
+                    #block_ratio = calc_ratio(rect[1][1], rect[1][0])
 
-                    block_length, block_width = calc_block_type(block_ratio)
+                    block_length, block_width = calc_block_type(rect[1][1], rect[1][0], self.camera)
 
 
                     if (moms['m00'] > area_min_threshold and moms['m00'] < area_max_threshold):
@@ -710,24 +713,49 @@ def find_ray_plane_intersection(ray):
     plane_point  = np.array([0, 0, -0.1])
 
 # TODO: Need to improve this checking...
-def calc_block_type(block_ratio):
-    if(block_ratio <= 0.4):
-        rospy.loginfo("Block ratio is very small so it's probably not a block..")
-    if(block_ratio > 0.5 and block_ratio <= 1.5):
-        block_type = (1, 1)
+def calc_block_type(block_pix_dim_1, block_pix_dim_2, camera):
 
-    elif(block_ratio > 1.5 and block_ratio <= 2.5):
-        block_type = (2, 1)
-
-    elif(block_ratio > 2.5 and block_ratio <= 3.5):
-        block_type = (3, 1)
-
-    elif(block_ratio > 3.5 and block_ratio <= 4.5):
-        block_type = (4, 1)
-
+    if(block_pix_dim_1 > block_pix_dim_2):
+        width = block_pix_dim_2
+        length = block_pix_dim_1
     else:
-        rospy.loginfo("BLOCK RATIO is %f, which doesn't fall into any of the defined ranges.. Setting to be a 1x1", block_ratio)
-        block_type = (1, 1)
+        width = block_pix_dim_1
+        length = block_pix_dim_2
+
+
+    rospy.loginfo("Length: %d Width: %d", length, width)
+
+    if(camera == "top"):
+
+        if(length < 20):
+            block_type = (1, 1)
+        elif(length >= 20 and length <= 33):
+            block_type = (2, 1)
+        elif(length > 33 and length <= 45):
+            block_type = (3, 1)
+        elif(length > 45 and length <= 60):
+            block_type = (4, 1)
+    else:
+
+        block_ratio = length / width
+
+        if(block_ratio <= 0.4):
+            rospy.loginfo("Block ratio is very small so it's probably not a block..")
+        if(block_ratio > 0.5 and block_ratio <= 1.3):
+            block_type = (1, 1)
+
+        elif(block_ratio > 1.3 and block_ratio <= 2.1):
+            block_type = (2, 1)
+
+        elif(block_ratio > 2.1 and block_ratio <= 3.1):
+            block_type = (3, 1)
+
+        elif(block_ratio > 3.1 and block_ratio <= 4.3):
+            block_type = (4, 1)
+
+        else:
+            rospy.loginfo("BLOCK RATIO is %f, which doesn't fall into any of the defined ranges.. Setting to be a 1x1", block_ratio)
+            block_type = (1, 1)
 
     return block_type
 
@@ -736,10 +764,6 @@ def generate_gripper_mask(hand_cam_image):
 
 def calc_ratio(height, width):
     #rospy.loginfo("Height: %d, Width: %d", h, w)
-    if(height > width):
-        temp = height
-        height = width
-        width = temp
 
     rospy.loginfo("Height: %d, Width: %d", height, width)
 
