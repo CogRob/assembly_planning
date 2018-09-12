@@ -46,7 +46,7 @@ if(TOP_CAM):
     BLU_LOW_VAL     = 127
     BLU_HIGH_VAL    = 255
 
-    GRN_LOW_HUE     = 30
+    GRN_LOW_HUE     = 33
     GRN_HIGH_HUE    = 75
     GRN_LOW_SAT     = 15
     GRN_HIGH_SAT    = 255
