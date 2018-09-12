@@ -15,17 +15,17 @@ from geometry_msgs.msg import Pose, PoseArray, Point, Quaternion, Pose2D
 from image_geometry import PinholeCameraModel
 from visualization_msgs.msg import Marker, MarkerArray
 from cv_bridge import CvBridge
-from block_mover.msg import BlockObservation, BlockObservationArray
+from block_mover.msg import BlockObservation, BlockObservationArray, BlockPixelLoc, BlockPixelLocArray
 
 #import baxter_interface
 # Check opencv version
 if(str.startswith(cv2.__version__, '3')):
-    print("OpeCV3 detected.")
+    print("OpenCV3 detected.")
     OPENCV3 = True
     TOP_CAM = True
     HAND_CAM = False
 else:
-    print("OpeCV2 detected.")
+    print("OpenCV2 detected.")
     OPENCV3 = False
     TOP_CAM = False
     HAND_CAM = True
@@ -122,7 +122,6 @@ if(HAND_CAM):
     YEL_LOW_VAL     = 182
     YEL_HIGH_VAL    = 255
 
-
 if(SIM):
     BLU_LOW_HUE     = 90
     BLU_HIGH_HUE    = 130
@@ -160,7 +159,6 @@ if(SIM):
     YEL_HIGH_SAT    = 255
     YEL_LOW_VAL     = 0
     YEL_HIGH_VAL    = 255
-
 
 colors = {
         "red":      {   "low_h": [RED_LOW_HUE_1, RED_LOW_HUE_2],   "high_h": [RED_HIGH_HUE_1, RED_HIGH_HUE_2],
@@ -339,7 +337,8 @@ class BlockFinder():
         self.ray_marker_pub     = rospy.Publisher("block_finder/" + self.camera + "/image_rays", MarkerArray, queue_size=1)
 
         # The observations of blocks
-        self.block_obs_pub      = rospy.Publisher("block_finder/" + self.camera + "/block_obs", BlockObservationArray, queue_size=1)
+        self.block_obs_pub      = rospy.Publisher("block_finder/" + self.camera + "/block_obs", BlockObservationArray, queue_size=1) 
+        self.pixel_loc_pub      = rospy.Publisher("block_finder/" + self.camera + "/block_pixel_locs", BlockPixelLocArray, queue_size=1)
 
     def subscribe(self):
         if(self.camera == "right_hand"):
@@ -373,6 +372,7 @@ class BlockFinder():
         block_marker_list = MarkerArray()
         ray_marker_list = MarkerArray()
         block_obs_list = []
+        block_pixel_locs_list = []
         
         # Mask cv_image to remove baxter's grippers
 
@@ -395,14 +395,13 @@ class BlockFinder():
 
         # Find table
 
-
         if(self.camera == "right_hand"):
             if(self.ir_reading != None):
                 area_min_threshold = 180 / self.ir_reading
-                area_max_threshold = 10000 # TODO: tune
+                area_max_threshold = 100000 # TODO: tune
             else:
                 area_min_threshold = 180 / 0.4
-                area_max_threshold = 10000 # TODO: tune
+                area_max_threshold = 100000 # TODO: tune
 
         elif(self.camera == "top"):
             area_min_threshold= 40
@@ -455,7 +454,15 @@ class BlockFinder():
             
             num_obj = len(contours) # number of objects found in current frame
 
-            cv2.circle(cv_image, (319, 255), 198, (255, 255, 0), 1)
+            cv2.circle(cv_image, (320, 200), 5, (255, 255, 0), 1)
+            cv2.circle(cv_image, (340, 20), 5, (0, 255, 255), 1)
+            
+            
+            # At 0 Meters
+            cv2.circle(cv_image, (325, 129), 5, (255, 0, 255), 1)
+
+            # At -0.15 Meters
+            cv2.circle(cv_image, (330, 94), 5, (255, 255, 0), 1)
 
             rospy.loginfo("Found %d %s objects", num_obj, color)
 
@@ -490,8 +497,6 @@ class BlockFinder():
 
                     cv2.drawContours(cv_image, [box], 0, color_vals[color] , 2)
 
-
-
                     cropped_img = masked_img[y-5:y+h+5, x-5:x+w+5]
 
                     if(self.camera == "top"):
@@ -502,7 +507,7 @@ class BlockFinder():
 
                     block_ratio = calc_ratio(rect[1][1], rect[1][0])
 
-                    block_type = calc_block_type(block_ratio)
+                    block_length, block_width = calc_block_type(block_ratio)
 
 
                     if (moms['m00'] > area_min_threshold and moms['m00'] < area_max_threshold):
@@ -526,7 +531,7 @@ class BlockFinder():
                             font_size = 3.0
                             font_thickness = 2 
 
-                        cv2.putText(cv_image,block_type_string(block_type),(cx,cy), font, font_size, color_vals[color], font_thickness)
+                        cv2.putText(cv_image,block_type_string(block_length, block_width),(cx,cy), font, font_size, color_vals[color], font_thickness)
 
                         self.pixel_loc = [cx, cy]
                         
@@ -604,7 +609,7 @@ class BlockFinder():
 
                             ray_id += 1
                             rospy.loginfo("Block position: %f, %f, %f", block_position_arr[0], block_position_arr[1], block_position_arr[2])
-                            rospy.loginfo("Block type: %s", block_type_string(block_type))
+                            rospy.loginfo("Block type: %s", block_type_string(block_length, block_width))
 
                             block_position_p = Point()
                             block_position_arr_copy = block_position_arr.copy()
@@ -623,14 +628,15 @@ class BlockFinder():
                             block_orientation.w = block_orientation_arr[3]
 
                             # Create a marker to visualize in RVIZ 
-                            curr_marker = create_block_marker(frame = "base", id = len(block_marker_list.markers), position = block_position_p, orientation=block_orientation, block_type=block_type, block_color = color, transparency = self.transparency)
+                            curr_marker = create_block_marker(frame = "base", id = len(block_marker_list.markers), position = block_position_p, orientation=block_orientation, length=block_length, width=block_width, block_color = color, transparency = self.transparency)
 
                             #rospy.loginfo("Adding new marker and block pose!")
                             block_marker_list.markers.append(curr_marker)
                             block_pose_list.append(Pose(position=block_position_p, orientation=block_orientation))
 
                             # TODO: The block angle will still be wrong. Need to transform it from the camera coordinate to the world frame
-                            block_obs_list.append(BlockObservation(pose = Pose2D(x = block_position_p.x, y = block_position_p.y, theta=block_angle), color=color_to_int(color), dim=block_type))
+                            block_obs_list.append(BlockObservation(pose = Pose2D(x = block_position_p.x, y = block_position_p.y, theta=block_angle), color=color, length=block_length, width=block_width))
+                            block_pixel_locs_list.append(BlockPixelLoc(x=cx, y=cy, theta=block_angle, color=color, length=block_length, width=block_width))
 
                         else:
                             rospy.loginfo("No ir_data has been recieved yet!")
@@ -643,7 +649,9 @@ class BlockFinder():
         self.rect_seg_img = cv_image.copy()
         self.ray_markers = ray_marker_list
         self.block_markers = block_marker_list
+        
         self.block_obs = block_obs_list
+        self.block_pixel_locs = block_pixel_locs_list
 
         self.detected_blocks = len(block_obs_list)
         
@@ -682,23 +690,13 @@ def remove_table(cv_image):
 
 
 
-def block_type_string(block_type):
-    if(block_type == BLOCK_TYPE_1X1):
-        return "1X1"
-    elif(block_type == BLOCK_TYPE_1X2):
-        return "1X2"
-    elif(block_type == BLOCK_TYPE_1X3):
-        return "1X3"
-    elif(block_type == BLOCK_TYPE_1X4):
-        return "1X4"
-    elif(block_type == BLOCK_TYPE_2X2):
-        return "2X2"
+def block_type_string(length, width):
+    return str(width) + "X" + str(length)
 
 
 def color_to_int(color):
     if color == "red":
         return COLOR_RED
-
     elif color == "green":
         return COLOR_GRN
     elif color == "blue":
@@ -714,24 +712,25 @@ def find_ray_plane_intersection(ray):
 # TODO: Need to improve this checking...
 def calc_block_type(block_ratio):
     if(block_ratio <= 0.4):
-        rospy
+        rospy.loginfo("Block ratio is very small so it's probably not a block..")
     if(block_ratio > 0.5 and block_ratio <= 1.5):
-        block_type = BLOCK_TYPE_1X1
+        block_type = (1, 1)
 
     elif(block_ratio > 1.5 and block_ratio <= 2.5):
-        block_type = BLOCK_TYPE_1X2
+        block_type = (2, 1)
 
     elif(block_ratio > 2.5 and block_ratio <= 3.5):
-        block_type = BLOCK_TYPE_1X3
+        block_type = (3, 1)
 
     elif(block_ratio > 3.5 and block_ratio <= 4.5):
-        block_type = BLOCK_TYPE_1X4
+        block_type = (4, 1)
 
     else:
-        rospy.loginfo("BLOCK RATIO is %f", block_ratio)
-        block_type = BLOCK_TYPE_1X1
+        rospy.loginfo("BLOCK RATIO is %f, which doesn't fall into any of the defined ranges.. Setting to be a 1x1", block_ratio)
+        block_type = (1, 1)
 
     return block_type
+
 def generate_gripper_mask(hand_cam_image):
     pass
 
@@ -842,7 +841,7 @@ def calc_center_angle_old(cont, cv_img):
     rospy.loginfo("Angle: %f", angle * 180 / math.pi)
 
 
-def create_block_marker(frame, id, position, orientation, block_type, block_color, transparency):
+def create_block_marker(frame, id, position, orientation, length, width, block_color, transparency):
     curr_marker = Marker()
     curr_marker.header.frame_id = frame
     
@@ -855,26 +854,9 @@ def create_block_marker(frame, id, position, orientation, block_type, block_colo
    
     single_unit_dim = 0.03
 
-    if(block_type == BLOCK_TYPE_1X1):
-        curr_marker.scale.x = single_unit_dim
-        curr_marker.scale.y = single_unit_dim
-        curr_marker.scale.z = single_unit_dim
-    elif(block_type == BLOCK_TYPE_1X2):
-        curr_marker.scale.x = single_unit_dim
-        curr_marker.scale.y = 2*single_unit_dim 
-        curr_marker.scale.z = single_unit_dim 
-    elif(block_type == BLOCK_TYPE_1X3):
-        curr_marker.scale.x = single_unit_dim 
-        curr_marker.scale.y = 3 *single_unit_dim
-        curr_marker.scale.z = single_unit_dim
-    elif(block_type == BLOCK_TYPE_1X4):
-        curr_marker.scale.x = single_unit_dim 
-        curr_marker.scale.y = 4 *single_unit_dim
-        curr_marker.scale.z = single_unit_dim
-
-    else:
-        rospy.loginfo("%s is not a supported block type. The only supported block types are 2x1, 1x2, and 1x3", block_type)
-
+    curr_marker.scale.x = single_unit_dim
+    curr_marker.scale.y = length*single_unit_dim 
+    curr_marker.scale.z = single_unit_dim 
 
     if(block_color == "red"):
         curr_marker.color.r = 1.0
@@ -997,6 +979,10 @@ def main():
             block_obs_array.inv_obs = block_finder.block_obs
 
             block_finder.block_obs_pub.publish(block_obs_array)
+
+            block_pixel_locs_array = BlockPixelLocArray()
+            block_pixel_locs_array.pixel_locs = block_finder.block_pixel_locs
+            block_finder.pixel_loc_pub.publish(block_pixel_locs_array)
     
         block_finder.rect_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.rect_seg_img))
 

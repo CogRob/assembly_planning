@@ -17,6 +17,8 @@ add_message_files(
   FILES
   BlockObservationArray.msg
   BlockObservation.msg
+  BlockPixelLocArray.msg
+  BlockPixelLoc.msg
 )
 
 generate_messages(
