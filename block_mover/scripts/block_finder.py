@@ -470,17 +470,7 @@ class BlockFinder():
             rospy.loginfo("Found %d %s objects", num_obj, color)
 
             for contour in contours:
-                moms = cv2.moments(contour)
-                cx = int(moms['m10']/moms['m00'])
-                cy = int(moms['m01']/moms['m00'])
-
-                if(self.camera == "top"):
-                    # Block should not be outside of circle centered at 319,255 with radius 200
-                    d = math.sqrt((cx - 319)**2 + (cy - 255)**2)
-
-                    if(d > 198):
-                        continue
-                        
+ 
                 area = cv2.contourArea(contour)
                 
                 if(area > area_min_threshold and area < area_max_threshold):
@@ -512,9 +502,21 @@ class BlockFinder():
 
                     block_length, block_width = calc_block_type(rect[1][1], rect[1][0], self.camera)
 
+                    moms = cv2.moments(contour)
 
                     if (moms['m00'] > area_min_threshold and moms['m00'] < area_max_threshold):
                         obj_found = True
+
+                        cx = int(moms['m10']/moms['m00'])
+                        cy = int(moms['m01']/moms['m00'])
+
+                        if(self.camera == "top"):
+                            # Block should not be outside of circle centered at 319,255 with radius 200
+                            d = math.sqrt((cx - 319)**2 + (cy - 255)**2)
+
+                            if(d > 198):
+                                continue
+                                
                         
 
                         # print 'cx = ', cx
@@ -613,6 +615,7 @@ class BlockFinder():
                             ray_id += 1
                             rospy.loginfo("Block position: %f, %f, %f", block_position_arr[0], block_position_arr[1], block_position_arr[2])
                             rospy.loginfo("Block type: %s", block_type_string(block_length, block_width))
+                            rospy.loginfo("Block angle: %f", math.degrees(block_angle))
 
                             block_position_p = Point()
                             block_position_arr_copy = block_position_arr.copy()
@@ -741,16 +744,16 @@ def calc_block_type(block_pix_dim_1, block_pix_dim_2, camera):
 
         if(block_ratio <= 0.4):
             rospy.loginfo("Block ratio is very small so it's probably not a block..")
-        if(block_ratio > 0.5 and block_ratio <= 1.3):
+        if(block_ratio > 0.5 and block_ratio <= 1.5):
             block_type = (1, 1)
 
-        elif(block_ratio > 1.3 and block_ratio <= 2.1):
+        elif(block_ratio > 1.5 and block_ratio <= 2.5):
             block_type = (2, 1)
 
-        elif(block_ratio > 2.1 and block_ratio <= 3.1):
+        elif(block_ratio > 2.5 and block_ratio <= 3.5):
             block_type = (3, 1)
 
-        elif(block_ratio > 3.1 and block_ratio <= 4.3):
+        elif(block_ratio > 3.5 and block_ratio <= 4.5):
             block_type = (4, 1)
 
         else:
