@@ -110,10 +110,10 @@ class Agent(object):
             PrimitiveActions.align: self._align
         }
         self._overhead_orientation = Quaternion(
-            x = 0.707,
-            y = 0.707,
-            z = 0.0,
-            w = 0.0
+            x = 0,
+            y = 1,
+            z = 0,
+            w = 0
         )
 
         # x=-0.0249590815779,
@@ -157,7 +157,6 @@ class Agent(object):
         hand_cam_pix_sub = rospy.Subscriber("/block_finder/right_hand/block_pixel_locs", BlockPixelLocArray, self.hand_cam_pixel_locs_callback)
 
     def hand_cam_pixel_locs_callback(self, data):
-        rospy.loginfo("New pixel location data has arrived")
         self.pixel_locs = data.pixel_locs
 
 
@@ -254,48 +253,46 @@ class Agent(object):
         lower_pixel_center_y = 94
 
         rospy.loginfo("Rotating gripper to %f", math.degrees(block_angle))
-        self._rotate_gripper(block_angle)
+        self._rotate_gripper(math.pi/2 + block_angle)
 
         # Align at 0.0 meters 
         while(True):
             if len(self.pixel_locs) > 0:
+
                 rospy.loginfo("There are some blocks...")
             else:
                 rospy.loginfo("There are no blocks...")
 
             for pixel_loc in self.pixel_locs:
-                rospy.loginfo("Block color (from locs): %s W: %d, L: %d", pixel_loc.color, pixel_loc.width, pixel_loc.length)
-                rospy.loginfo("Block color: %s W: %d, L: %d", block_color, block_width, block_length)
 
                 if(pixel_loc.color == block_color and pixel_loc.width == block_width and pixel_loc.length == block_length):
+                    rospy.loginfo("Block color (from locs): %s W: %d, L: %d", pixel_loc.color, pixel_loc.width, pixel_loc.length)
+                    rospy.loginfo("Block color: %s W: %d, L: %d", block_color, block_width, block_length)
+                    rospy.loginfo("Block pixel location: x: %f y:%f", pixel_loc.x, pixel_loc.y)
+                    
                     # We found the block we want to allign with
-                    pixel_x_dist = pixel_loc.x - lower_pixel_center_x
-                    pixel_y_dist = pixel_loc.y - lower_pixel_center_y
+                    pixel_x_dist = pixel_loc.x - upper_pixel_center_x
+                    pixel_y_dist = pixel_loc.y - upper_pixel_center_x
+
                     pixel_dist = math.sqrt(pixel_x_dist**2 + pixel_y_dist**2)
 
                     rospy.loginfo("Pixel distance is: %f", pixel_x_dist)
+
                     if(pixel_x_dist > 100):
                         # Don't move... something must be wrong
+                        # Move along x first    
                         return
                     if(pixel_y_dist > 100):
                         # Don't move... something must be wrong
                         return
 
                     if(pixel_dist > pixel_dist_thresh):
-                        motion_angle = math.atan2(pixel_loc.y - lower_pixel_center_y, pixel_loc.x - lower_pixel_center_x)
-                        """
+                        rospy.loginfo("X_DIST: %f, Y_DIST: %f", pixel_x_dist, pixel_y_dist)
+                        motion_angle = math.atan2(pixel_x_dist, pixel_y_dist)
 
-                        if(pixel_x_dist < 0 and pixel_y_dist > 0):
-                            # Q2
-                            motion_angle += math.pi
-                        elif(pixel_x_dist , 0 and pixel_y_dist < 0):
-                            # Q3
-                            motion_angle += math.pi
-                        """
-
-                        rospy.loginfo("Pixel distance still larger than threshold. Moving in direction %f", motion_angle)
-                        self.move_camera_in_plane(motion_angle, motion_dist = 0.01)
-                        rospy.sleep(20)
+                        rospy.loginfo("Pixel distance still larger than threshold. Moving in direction %f degrees", math.degrees(motion_angle))
+                        self.move_camera_in_plane(motion_angle, motion_dist = .01)
+                        rospy.sleep(1)
                         continue
                     else:
                         rospy.loginfo("Reached within %f of goal", pixel_dist)
@@ -360,7 +357,7 @@ class Agent(object):
         joint_angles = self.ik_request(ik_pose)
         self._guarded_move_to_joint_position(joint_angles)
 
-    def get_current_state(self):
+    def get_current_pose(self):
         return self._limb.endpoint_pose()
 
     def move_camera_in_plane(self, direction, motion_dist=0.01):

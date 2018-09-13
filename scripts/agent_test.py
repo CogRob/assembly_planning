@@ -63,7 +63,7 @@ def main():
         transport_constraint = Point()  # pylint: disable=C0103
         transport_constraint.x = block_location.x
         transport_constraint.y = block_location.y
-        transport_constraint.z = -0.15
+        transport_constraint.z = 0
         
         test_agent.executor(kb.PrimitiveActions.transport, transport_constraint)
 
@@ -73,13 +73,11 @@ def main():
 
         rospy.sleep(5)
 
-        curr_state = test_agent.get_current_state()
+        curr_pose = test_agent.get_current_pose()
 
-        new_x = curr_state['position'].x
-        new_y = curr_state['position'].y
+        new_x = curr_pose['position'].x
+        new_y = curr_pose['position'].y
         new_z = -0.28
-
-
 
         transport_constraint.x = new_x
         transport_constraint.y = new_y
@@ -109,7 +107,7 @@ def main():
         transport_constraint.y = new_y
         transport_constraint.z = 0
         test_agent.executor(kb.PrimitiveActions.transport, transport_constraint)
-        
+
         rospy.sleep(10)
 
 if __name__ == '__main__':
