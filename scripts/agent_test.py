@@ -19,6 +19,7 @@ def main():
 
     # create an agent with the intent to control right arm
     test_agent = agent.Agent('right')   #pylint: disable=C0103
+    test_agent.subscribe()
 
     # TEST various primitive actions #
     while(True):
@@ -26,8 +27,8 @@ def main():
 
         transport_constraint = Point()  # pylint: disable=C0103
  
-        transport_constraint.x = .75
-        transport_constraint.y = -.5
+        transport_constraint.x = .5
+        transport_constraint.y = -.75
         transport_constraint.z = 0
         test_agent.executor(kb.PrimitiveActions.transport, transport_constraint)
 
@@ -40,78 +41,52 @@ def main():
         if(inv_block_count != 8):
             rospy.loginfo("There are not 8 blocks, something is wrong... Exiting!")
 
-        """
         i = 0
         for block in test_agent.inv_state:
             print("Block ", i, ": ", str(block))
             i += 1
 
-
         block_num = input("Which block would you like to pick up?")
 
-        rospy.loginfo("Picking up %d", block_num)
+        chosen_block = test_agent.inv_state[block_num]
 
-        picked_block = test_agent.inv_state[block_num]
-
-        block_location = picked_block.pose
+        block_location = chosen_block.pose
         
         response = input("Block location is " + str(block_location) + ". Is this reasonable?")
+        
+        rospy.loginfo("Moving above block %d", block_num)
 
-        rospy.loginfo("Moving block...")
+        block_color = chosen_block.color
+        block_length = chosen_block.length
+        block_width = chosen_block.width
 
         transport_constraint = Point()  # pylint: disable=C0103
-        """
-        new_x = 0.6
-        new_y = 0.0
-        new_z = 0
+        transport_constraint.x = block_location.x
+        transport_constraint.y = block_location.y
+        transport_constraint.z = -0.15
+        
+        test_agent.executor(kb.PrimitiveActions.transport, transport_constraint)
+
+        rospy.sleep(1)
+
+        test_agent.extern_align(block_color, block_length, block_width, block_location.theta)
+
+        rospy.sleep(5)
+
+        curr_state = test_agent.get_current_state()
+
+        new_x = curr_state['position'].x
+        new_y = curr_state['position'].y
+        new_z = -0.28
+
+
 
         transport_constraint.x = new_x
         transport_constraint.y = new_y
-        transport_constraint.z = 0
+        transport_constraint.z = new_z
 
         test_agent.executor(kb.PrimitiveActions.transport, transport_constraint)
         
-
-
-        i =0 
-        while(True):
-            direction = input("Enter a direction (in radians you wish to translate the camera:")
-            if(direction == -1):
-                break
-            motion_dist = input("Enter the distance to translate:")
-            
-            new_x, new_y, new_z = test_agent.move_camera_in_plane(direction, motion_dist)
-
-            rospy.sleep(1.0)
-            i+=1
-        
-        # Move down towards table
-        """ 
-        transport_constraint.x = new_x
-        transport_constraint.y = new_y
-        transport_constraint.z = -.15
-        test_agent.executor(kb.PrimitiveActions.transport, transport_constraint)
- 
-        i =0 
-        while(i < 10):
-            direction = input("Enter a direction (in radians you wish to translate the camera:")
-            if(direction == -1):
-                break
-
-            new_x, new_y, new_z = test_agent.move_camera_in_plane(direction, motion_dist=0.005)
-
-            rospy.sleep(1.0)
-            i+=1       
-        """
-            
-
-        transport_constraint.x = new_x
-        transport_constraint.y = new_y
-        transport_constraint.z = 0
-        test_agent.executor(kb.PrimitiveActions.transport, transport_constraint)
-        
-        rospy.sleep(30)
-
         # test pick
         rospy.logdebug("testing %s...", kb.PrimitiveActions.pick)
         test_agent.executor(kb.PrimitiveActions.pick)
@@ -130,39 +105,12 @@ def main():
         rospy.logdebug("testing %s...", kb.PrimitiveActions.place)
         test_agent.executor(kb.PrimitiveActions.place)
      
-
-
-        """
-        transport_constraint.x = block_location.x
-        transport_constraint.y = block_location.y
-        transport_constraint.z = -0.28
+        transport_constraint.x = new_x
+        transport_constraint.y = new_y
+        transport_constraint.z = 0
         test_agent.executor(kb.PrimitiveActions.transport, transport_constraint)
         
+        rospy.sleep(10)
 
-
-        response = input("Block is in baxter's hand. Press enter to choose a location.")
-        x_loc = input("Enter an x_coordinate from .5 to .9.")
-        y_loc = input("Enter an x_coordinate from -.25 to .25")
-        
-
-        transport_constraint.x = x_loc
-        transport_constraint.y = y_loc
-        transport_constraint.z = -0.28
-        test_agent.executor(kb.PrimitiveActions.transport, transport_constraint)
-
-        # rospy.logdebug("testing %s with object constraint",
-        #                kb.PrimitiveActions.transport)
-        # # TODO: add an object to the env of Agent
-        # transport_constraint = kb.Block()
-        # # TODO: fill in the object constraint
-        # agent.executor(kb.PrimitiveActions.transport, transport_constraint)
-
-        # test place
-        rospy.logdebug("testing %s...", kb.PrimitiveActions.place)
-        test_agent.executor(kb.PrimitiveActions.place)
-        """
-
-
-    # test align
 if __name__ == '__main__':
     main()

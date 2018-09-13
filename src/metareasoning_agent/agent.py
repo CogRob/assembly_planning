@@ -137,57 +137,28 @@ class Agent(object):
         self.move_to_start(self._start_angles)
 
         self.curr_pose = None
+        self.pixel_locs = []
 
     def update_block_locations(self):
         rospy.loginfo("Updating block locations. Waiting for BlockObservationArray....")
 
         block_obs_msg = rospy.wait_for_message("/block_finder/top/block_obs", BlockObservationArray)
 
-        rospy.loginfo("Updating block locations. Waiting for BlockObservationArray....")
-        block_locations = []
-
         rospy.loginfo("Received %d block observations", len(block_obs_msg.inv_obs))
+        block_locations = []
         
         for block_obs in block_obs_msg.inv_obs:
-            if(block_obs.dim == 1):
-                length = 1
-                width = 1
-            elif(block_obs.dim == 2):
-                length = 2
-                width = 1
-            elif(block_obs.dim == 4):
-                length = 3
-                width = 1
-            elif(block_obs.dim == 8):
-                length = 4
-                width = 1
-            elif(block_obs.dim == 16):
-                length = 2
-                width = 2
-            else:
-                rospy.logerr("Invalid block type encountered while updating block locations in agent.py")
-                return
-            
-            if(block_obs.color == 1):
-                color = "red"
-            elif(block_obs.color == 2):
-                color = "green"
-            elif(block_obs.color == 4): 
-                color = "blue"
-            else:
-                rospy.logerr("Invalid block color encountered while updating block locations in agent.py")
-                return
-
-            block_locations.append(Block(length=length, width=width, color=color, pose=block_obs.pose))
-
-
-
-        
+            block_locations.append(Block(length=block_obs.length, width=block_obs.width, color=block_obs.color, pose=block_obs.pose))
 
         self.inv_state = block_locations
 
+
     def subscribe(self):
-        hand_cam_pix_sub = rospy.Subscriber("/block_finder/right_hand/block_obs")
+        hand_cam_pix_sub = rospy.Subscriber("/block_finder/right_hand/block_pixel_locs", BlockPixelLocArray, self.hand_cam_pixel_locs_callback)
+
+    def hand_cam_pixel_locs_callback(self, data):
+        rospy.loginfo("New pixel location data has arrived")
+        self.pixel_locs = data.pixel_locs
 
 
     # BAXTER-specific methods
@@ -269,30 +240,74 @@ class Agent(object):
         joint_angles = self.ik_request(approach)
         self._guarded_move_to_joint_position(joint_angles)
 
-    def _align(self, pose, block_color, block_type):
-
+    def _align(self, block_color, block_length, block_width, block_angle):
         # When align gets called, height should be at 0
+        pixel_dist_thresh = 5
+        pixel_dist = 0
+            
+        # At 0.0 meters the location of center pixel that will result in optimal grasp
+        upper_pixel_center_x = 325
+        upper_pixel_center_y = 129
 
-        #while(True):
+        # At -0.15 meters the location of center pixel that will result in optimal grasp
+        lower_pixel_center_x = 330
+        lower_pixel_center_y = 94
+
+        rospy.loginfo("Rotating gripper to %f", math.degrees(block_angle))
+        self._rotate_gripper(block_angle)
+
+        # Align at 0.0 meters 
+        while(True):
+            if len(self.pixel_locs) > 0:
+                rospy.loginfo("There are some blocks...")
+            else:
+                rospy.loginfo("There are no blocks...")
+
+            for pixel_loc in self.pixel_locs:
+                rospy.loginfo("Block color (from locs): %s W: %d, L: %d", pixel_loc.color, pixel_loc.width, pixel_loc.length)
+                rospy.loginfo("Block color: %s W: %d, L: %d", block_color, block_width, block_length)
+
+                if(pixel_loc.color == block_color and pixel_loc.width == block_width and pixel_loc.length == block_length):
+                    # We found the block we want to allign with
+                    pixel_x_dist = pixel_loc.x - lower_pixel_center_x
+                    pixel_y_dist = pixel_loc.y - lower_pixel_center_y
+                    pixel_dist = math.sqrt(pixel_x_dist**2 + pixel_y_dist**2)
+
+                    rospy.loginfo("Pixel distance is: %f", pixel_x_dist)
+                    if(pixel_x_dist > 100):
+                        # Don't move... something must be wrong
+                        return
+                    if(pixel_y_dist > 100):
+                        # Don't move... something must be wrong
+                        return
+
+                    if(pixel_dist > pixel_dist_thresh):
+                        motion_angle = math.atan2(pixel_loc.y - lower_pixel_center_y, pixel_loc.x - lower_pixel_center_x)
+                        """
+
+                        if(pixel_x_dist < 0 and pixel_y_dist > 0):
+                            # Q2
+                            motion_angle += math.pi
+                        elif(pixel_x_dist , 0 and pixel_y_dist < 0):
+                            # Q3
+                            motion_angle += math.pi
+                        """
+
+                        rospy.loginfo("Pixel distance still larger than threshold. Moving in direction %f", motion_angle)
+                        self.move_camera_in_plane(motion_angle, motion_dist = 0.01)
+                        rospy.sleep(20)
+                        continue
+                    else:
+                        rospy.loginfo("Reached within %f of goal", pixel_dist)
+                        rospy.sleep(10)
+                        return
+                else:
+                    continue
 
 
-        # Then, an initial alignment moves the camera until the block is centered in the frame.
-
-
-
-
-        # TODO: this needs a better servoing approach
-        # sort of a loop where we get latest pose from the perception component
-        # and then move for nth part of a meter before checking again
-        """
-        while(pixel_dist < pixel_dist_thresh):
-            pixel_dist = 
-
-        """
-
-        
-        #return pose
-        pass
+    # TODO: For testing purposes to give tester access to private _align(), delete later!
+    def extern_align(self, block_color, block_length, block_width, block_angle):
+        self._align(block_color, block_length, block_width, block_angle)
 
 
     def _retract(self):
@@ -345,8 +360,10 @@ class Agent(object):
         joint_angles = self.ik_request(ik_pose)
         self._guarded_move_to_joint_position(joint_angles)
 
+    def get_current_state(self):
+        return self._limb.endpoint_pose()
 
-    def move_camera_in_plane(self, direction, motion_dist=0.005):
+    def move_camera_in_plane(self, direction, motion_dist=0.01):
         if(direction is None):
             return
 
@@ -355,14 +372,23 @@ class Agent(object):
         current_pose = self._limb.endpoint_pose()
 
         ik_pose = Pose()
-        ik_pose.position.x = current_pose['position'].x + motion_dist*math.cos(direction)
-        ik_pose.position.y = current_pose['position'].y + motion_dist*math.sin(direction)
-        ik_pose.position.z = current_pose['position'].z
+        
         ik_pose.orientation.x = current_pose['orientation'].x 
         ik_pose.orientation.y = current_pose['orientation'].y 
         ik_pose.orientation.z = current_pose['orientation'].z
         ik_pose.orientation.w = current_pose['orientation'].w
 
+        ik_pose_q = (ik_pose.orientation.x,
+                     ik_pose.orientation.y,
+                     ik_pose.orientation.z,
+                     ik_pose.orientation.w)
+
+        ik_pose_euler = tf.transformations.euler_from_quaternion(ik_pose_q)
+        rospy.loginfo("Roll: %f Pitch: %f Yaw %f", ik_pose_euler[0], ik_pose_euler[1], ik_pose_euler[2])
+
+        ik_pose.position.x = current_pose['position'].x + motion_dist*math.cos(direction) # + ik_pose_euler[2])
+        ik_pose.position.y = current_pose['position'].y + motion_dist*math.sin(direction) # + ik_pose_euler[2])
+        ik_pose.position.z = current_pose['position'].z
 
         joint_angles = self.ik_request(ik_pose)
         self._guarded_move_to_joint_position(joint_angles)
