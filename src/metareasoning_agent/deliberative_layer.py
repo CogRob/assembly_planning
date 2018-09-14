@@ -22,7 +22,7 @@ class DelControl(Enum):
 
 
 class DeliberativeLayer(object):
-    """Deliberative class for MUXing communication b/w learner and planner"""
+    """Communication MUX over learner and planner"""
 
     def __init__(self, args):
         self._logger = logging.getLogger(
@@ -67,7 +67,7 @@ class DeliberativeLayer(object):
 
     def get_plan(self, task):
         """
-        Interface function for meta-reasoner to get the intended course of action
+        Interface function for meta-reasoner: returns intended action plan
 
         Only works if the planner mode is on, otherwise just returns a None
         """
@@ -75,3 +75,7 @@ class DeliberativeLayer(object):
             return None
         else:
             return self._components[self._control].get_plan(task)
+
+    def update_state(self, state):
+        """Interface function for communicating state to components"""
+        self._components[self._control].update_state(state)
