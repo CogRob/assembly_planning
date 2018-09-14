@@ -61,6 +61,24 @@ def permute_list(items):
     return permuted_lists
 
 
+def print_blocks(blocks):
+    MODULE_LOGGER.debug('List of blocks:')
+    for (idx, block) in enumerate(blocks):
+        MODULE_LOGGER.debug('Block %d: %s', idx, str(block))
+
+
+def print_mission(mission):
+    MODULE_LOGGER.debug('Mission is as follows:')
+    for item in mission:
+        MODULE_LOGGER.debug('Block %s: %s', str(item[0]), str(item[1]))
+
+
+def print_plan(plan):
+    MODULE_LOGGER.debug('Plan is as follows:')
+    for item in plan:
+        MODULE_LOGGER.debug('%s: %s', str(item[0]), str(item[1]))
+
+
 class Planner(object):  # pylint: disable=too-many-instance-attributes
     """Planner class which houses all decomposition rules and task-plans
 
@@ -142,8 +160,10 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         pose_1x2 = Pose()
         pose_1x4 = Pose()
         # TODO: fill these damned Poses
-        self._mission2method_db['task1'].append([(Block(1, 2), pose_1x2),
-                                                 (Block(1, 4), pose_1x4)])
+        plan = []
+        plan.append((Block(1, 2), pose_1x2))
+        plan.append((Block(1, 4), pose_1x4))
+        self._mission2method_db['task1'].append(permute_list(plan))
         # append the 1x1 + 1x2 + 1x2 + 1x1 mission
         pose_1x1 = Pose()
         # TODO: fill these damned Poses
@@ -154,41 +174,40 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         plan.append((Block(1, 2), pose_1x2))
         plan.append((Block(1, 2), pose_1x2))
         plan.append((Block(1, 1), pose_1x1))
-        self._mission2method_db['task1'].append(plan)
+        self._mission2method_db['task1'].append(permute_list(plan))
         # append the 1x1,1x1 over 1x2,1x2 mission
+        # TODO: fill these damned Poses
         plan = []
         plan.append((Block(1, 1), pose_1x1))
         plan.append((Block(1, 2), pose_1x2))
         plan.append((Block(1, 2), pose_1x2))
         plan.append((Block(1, 1), pose_1x1))
-        self._mission2method_db['task1'].append(plan)
+        self._mission2method_db['task1'].append(permute_list(plan))
         # append the 1x2 over 1x3,1x1 mission
+        # TODO: fill these damned Poses
         plan = []
         plan.append((Block(1, 1), pose_1x1))
         plan.append((Block(1, 2), pose_1x2))
         plan.append((Block(1, 2), pose_1x2))
         plan.append((Block(1, 1), pose_1x1))
-        self._mission2method_db['task1'].append(plan)
-        # call the permutation_generator
-        # TODO: self._generate_permutations(list of lists)
+        self._mission2method_db['task1'].append(permute_list(plan))
 
         # generating possible missions for L-shape task
         self._mission2method_db['task2'] = []
         # 2.1 1x4 perp 1x1,1x1
+        # TODO: fill these damned Poses
         plan = []
         plan.append((Block(1, 4), pose_1x4))
         plan.append((Block(1, 1), pose_1x4))
         plan.append((Block(1, 1), pose_1x4))
-        self._mission2method_db['task2'].append(plan)
+        self._mission2method_db['task2'].append(permute_list(plan))
         # 2.2 1x3 perp 1x3
         plan = []
         # TODO: fill these damned Poses
         pose_1x3 = Pose()
         plan.append((Block(1, 3), pose_1x3))
         plan.append((Block(1, 3), pose_1x3))
-        self._mission2method_db['task2'].append(plan)
-        # call the permutation_generator
-        # TODO: self._generate_permutations(list of lists)
+        self._mission2method_db['task2'].append(permute_list(plan))
 
     def _populate_method(self):
         """
@@ -295,6 +314,12 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
             self._action_pointer = 0
         return self._result
 
+    def update(self, blocks):
+        """incoming interface to update state"""
+        self._block_list = blocks
+        self._logger.debug('Block list updated')
+        print_blocks(self._block_list)
+
     def get_action(self):
         """Return the next action from the plan created for task
         """
@@ -311,6 +336,9 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
 
     def get_plan(self, task):
         """Interface for meta-reasoner"""
+        if self._debug:
+            print_mission(self._mission_plan)
+            print_plan(self._action_plan)
         if self._task == task:
             return self._action_plan
         return None
