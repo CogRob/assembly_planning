@@ -34,6 +34,33 @@ def check_availability(plans, blocks):
     return result_list
 
 
+def expand_missions(missions):
+    # TODO: this needs to be a block to block(s) mapping where the output
+    # should be an ordered dictionary with each entry as the sub-goal block
+    # and its attribute, i.e. Pose
+    # 1. 1x4 to 2x2,2x2 1x1,1x3 1x3,1x1
+    # 2. 1x3 to 1x1,1x1,1x1 1x1,1x2 1x2,1x1
+    # 3. 1x2 to 1x1,1x1
+    # * Would love it if we can do reverse mapping as well in the same
+    # format. block to block mapping is kind of like a function
+    # where you access the required Pose of the Block and then
+    # map it to a list of blocks whose poses are a function of the
+    # input
+    pass
+
+
+def permute_list(items):
+    """
+    Takes a list of elements and returns a list of permutations, inclusive
+    """
+    if len(items) == 1:
+        return items
+    permuted_lists = permute_list(items[1:])
+    for sequence in permuted_lists:
+        sequence.insert(0, items[0])
+    return permuted_lists
+
+
 class Planner(object):  # pylint: disable=too-many-instance-attributes
     """Planner class which houses all decomposition rules and task-plans
 
@@ -93,10 +120,23 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         self._action_pointer = -1
 
     # internal databases
+    def generate_database(self):
+        """
+        Used once to generate the task mission DB and store it as a pickle
+
+        When invoked asks the user to input the required pose and orientation
+        for the blocks, fills them in, generates permutations, saves to a
+        pickle and exits
+        """
+        # TODO: to implement
+        pass
+
     def _populate_mission_rules(self):
         """
         Decompose from form to block tree
         """
+
+        # generating possible missions for task1 - 1x2 over 1x4
         self._mission2method_db['task1'] = []
         # append the 1x2 + 1x4 mission
         pose_1x2 = Pose()
@@ -104,6 +144,7 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         # TODO: fill these damned Poses
         self._mission2method_db['task1'].append([(Block(1, 2), pose_1x2),
                                                  (Block(1, 4), pose_1x4)])
+        # append the 1x1 + 1x2 + 1x2 + 1x1 mission
         pose_1x1 = Pose()
         # TODO: fill these damned Poses
         # pose_1x2 = Pose()
@@ -114,6 +155,40 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         plan.append((Block(1, 2), pose_1x2))
         plan.append((Block(1, 1), pose_1x1))
         self._mission2method_db['task1'].append(plan)
+        # append the 1x1,1x1 over 1x2,1x2 mission
+        plan = []
+        plan.append((Block(1, 1), pose_1x1))
+        plan.append((Block(1, 2), pose_1x2))
+        plan.append((Block(1, 2), pose_1x2))
+        plan.append((Block(1, 1), pose_1x1))
+        self._mission2method_db['task1'].append(plan)
+        # append the 1x2 over 1x3,1x1 mission
+        plan = []
+        plan.append((Block(1, 1), pose_1x1))
+        plan.append((Block(1, 2), pose_1x2))
+        plan.append((Block(1, 2), pose_1x2))
+        plan.append((Block(1, 1), pose_1x1))
+        self._mission2method_db['task1'].append(plan)
+        # call the permutation_generator
+        # TODO: self._generate_permutations(list of lists)
+
+        # generating possible missions for L-shape task
+        self._mission2method_db['task2'] = []
+        # 2.1 1x4 perp 1x1,1x1
+        plan = []
+        plan.append((Block(1, 4), pose_1x4))
+        plan.append((Block(1, 1), pose_1x4))
+        plan.append((Block(1, 1), pose_1x4))
+        self._mission2method_db['task2'].append(plan)
+        # 2.2 1x3 perp 1x3
+        plan = []
+        # TODO: fill these damned Poses
+        pose_1x3 = Pose()
+        plan.append((Block(1, 3), pose_1x3))
+        plan.append((Block(1, 3), pose_1x3))
+        self._mission2method_db['task2'].append(plan)
+        # call the permutation_generator
+        # TODO: self._generate_permutations(list of lists)
 
     def _populate_method(self):
         """
@@ -122,18 +197,6 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
             Mission input --> Mission Decomposition based on availability of
             blocks --> Methods which can enable the goal state --> Action Plan
         """
-        # TODO: this needs to be a block to block(s) mapping where the output
-        # should be an ordered dictionary with each entry as the sub-goal block
-        # and its attribute, i.e. Pose
-        # 1. 1x4 to 2x2,2x2 1x1,1x3 1x3,1x1
-        # 2. 1x3 to 1x1,1x1,1x1 1x1,1x2 1x2,1x1
-        # 3. 1x2 to 1x1,1x1
-        # * Would love it if we can do reverse mapping as well in the same
-        # format
-        # TODO: block to block mapping is kind of like a function
-        # where you access the required Pose of the Block and then
-        # map it to a list of blocks whose poses are a function of the
-        # input pose
         self._method_db['acquire'] = self._acquireroutine
         self._method_db['deposit'] = self._depositroutine
         # self._rule_db['nudge'] = self._nudgeroutine
@@ -211,7 +274,11 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         a tree or list (depending upon if self._multiple_mode is True or False
         respectively)
         """
-        pass
+        for pair in self._mission_plan:
+            mini_plan = self._method_db[pair[0]](pair[1])
+            self._action_plan.append(mini_plan)
+        self._logger.debug('Action plan created of length %d',
+                           len(self._action_plan))
 
     # external interface functions
     def setup(self, task, multiple=False):
