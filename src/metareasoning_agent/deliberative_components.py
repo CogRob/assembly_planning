@@ -97,12 +97,27 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         """
         Decompose from form to block tree
         """
-        pass
+        self._mission2method_db['task1'] = []
+        # append the 1x2 + 1x4 mission
+        pose_1x2 = Pose()
+        pose_1x4 = Pose()
+        # TODO: fill these damned Poses
+        self._mission2method_db['task1'].append([(Block(1, 2), pose_1x2),
+                                                 (Block(1, 4), pose_1x4)])
+        pose_1x1 = Pose()
+        # TODO: fill these damned Poses
+        # pose_1x2 = Pose()
+        # pose_1x4 = Pose()
+        plan = []
+        plan.append((Block(1, 1), pose_1x1))
+        plan.append((Block(1, 2), pose_1x2))
+        plan.append((Block(1, 2), pose_1x2))
+        plan.append((Block(1, 1), pose_1x1))
+        self._mission2method_db['task1'].append(plan)
 
     def _populate_method(self):
         """
         Protected method to fill in base methods
-
         The planning hierarchy goes:
             Mission input --> Mission Decomposition based on availability of
             blocks --> Methods which can enable the goal state --> Action Plan
@@ -115,36 +130,12 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         # 3. 1x2 to 1x1,1x1
         # * Would love it if we can do reverse mapping as well in the same
         # format
-
-    def _populate_plans(self):
-        """Fills in the task: plan dictionary
-        :returns: a filled _plan_dict
-
-        """
-        # TODO: later this should use task as an inpur which should have two
-        # parts, required blocks and required positions. The required positions
-        # would then be operated on to decide the interim positions of the
-        # builder blocks
-
-        # test task is to pick up a 1x2 block and place it on a pre-decided
-        # position in the workspace
-        if self._debug:
-            block = Block(1, 2, 'red')
-            b_pose = Pose()
-            b_pose.position.x = 0.627
-            b_pose.position.y = -0.485
-            b_pose.position.z = -0.28
-            self._plan_db['test'] = [('acquire', block), ('deposit', b_pose)]
-        else:
-            # TODO: need to code other plans
-            pass
-
-    def _populate_method(self):
-        """
-        Protected method to fill in base methods
-        """
-        self._rule_db['acquire'] = self._acquireroutine
-        self._rule_db['deposit'] = self._depositroutine
+        # TODO: block to block mapping is kind of like a function
+        # where you access the required Pose of the Block and then
+        # map it to a list of blocks whose poses are a function of the
+        # input pose
+        self._method_db['acquire'] = self._acquireroutine
+        self._method_db['deposit'] = self._depositroutine
         # self._rule_db['nudge'] = self._nudgeroutine
 
     # routine definitions
