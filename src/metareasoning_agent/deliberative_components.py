@@ -3,18 +3,22 @@
 Class for rule-based planner for supporting meta-reasoning and agent class
 """
 
+import logging
 from geometry_msgs.msg import Pose
 from metareasoning_agent.knowledge_base import PrimitiveActions, Block
+
+MODULE_LOGGER = logging.getLogger(
+    'metareasoning_agent.deliberative_components')
 
 
 class Planner(object):  # pylint: disable=too-many-instance-attributes
     """Planner class which houses all decomposition rules and task-plans
 
     Important interfacing functions:
-    * make_plan(task, multiple = bool):
-        'task' is of form string to start with. make_plan resets all
+    * setup(task, multiple = bool):
+        'task' is of form string to start with. setup resets all
         internal variables, and finds the corresponding
-        plan to task. If found the result = True, otherwise False. make_plan
+        plan to task. If found the result = True, otherwise False. setup
         sends the retrieved plan for decomposition to _plan_decomposition()
         which decomposes and stores the sequence of primitive actions in list.
         A pointer, self_next_action, is initialized which takes care of which
@@ -35,6 +39,8 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         meta-reasoner
 
     Important internal functions:
+    * _mission_decomposition():
+        decomposes task into a tree of possible block combinations
     * _plan_decomposition():
         returns the optimal decomposition or stores all
         possible decompositions as a tree/list to be accessed by
@@ -48,65 +54,31 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
 
     def __init__(self, debug):
         self._debug = debug
+        self._logger = logging.getLogger(
+            'metareasoning_agent.deliberative_components.Planner')
         # database init
         self._plan_db = {}
         self._method_db = {}
         self._mission_rules_dict = {}
         self._mission_rules_db = []
         self._block_list = []
-        self._block_attr = []  # block attributes should be the Pose or Pose2D
         # state-ful variables
+        self._mission_plan = []
         self._action_plan = []
+        self._mission_result = False
         self._result = False
         self._task = None
         self._multiple_mode = False
         self._action_pointer = -1
 
-    def _populate_method(self):
-        """
-        Protected method to fill in base methods
-        """
-        self._rule_db['acquire'] = self._acquireroutine
-        self._rule_db['deposit'] = self._depositroutine
-        # self._rule_db['nudge'] = self._nudgeroutine
-
-    def _acquireroutine(self, block):  # pylint: disable=no-self-use
-        """
-        Definition for the high-level method acquire
-
-        input
-        :block: of type knowledge_base.Block
-
-        returns
-        :action_plan: a list of tuples, where 1st element is the name of a
-        PrimitiveAction and 2nd is the related constraint
-        """
-        action_plan = []
-        action_plan.append((PrimitiveActions.transport, block))
-        action_plan.append((PrimitiveActions.align, block))
-        action_plan.append((PrimitiveActions.pick, None))
-        action_plan.append((PrimitiveActions.retract, None))
-        return action_plan
-
-    def _depositroutine(self, b_pose):  # pylint: disable=no-self-use
-        """
-        Definition for the high-level method deposit
-
-        input
-        :block: of type knowledge_base.Block
-
-        returns
-        :action_plan: a list of tuples, where 1st element is the name of a
-        PrimitiveAction and 2nd is the related constraint
-        """
-        action_plan = []
-        action_plan.append((PrimitiveActions.transport, b_pose))
-        action_plan.append((PrimitiveActions.align, b_pose))
-        action_plan.append((PrimitiveActions.place, None))
-        action_plan.append((PrimitiveActions.retract, None))
-        return action_plan
-
+    # internal databases
     def _populate_mission_rules(self):
+        """
+        Decompose from form to block tree
+        """
+        pass
+
+    def _populate_block_rules(self):
         """
         Protected method to fill in the mission decomposition DB
 
@@ -146,14 +118,77 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
             # TODO: need to code other plans
             pass
 
-    def make_plan(self, task, multiple):
+    def _populate_method(self):
+        """
+        Protected method to fill in base methods
+        """
+        self._rule_db['acquire'] = self._acquireroutine
+        self._rule_db['deposit'] = self._depositroutine
+        # self._rule_db['nudge'] = self._nudgeroutine
+
+    # routine definitions
+    def _acquireroutine(self, block):  # pylint: disable=no-self-use
+        """
+        Definition for the high-level method acquire
+
+        input
+        :block: of type knowledge_base.Block
+
+        returns
+        :action_plan: a list of tuples, where 1st element is the name of a
+        PrimitiveAction and 2nd is the related constraint
+        """
+        action_plan = []
+        action_plan.append((PrimitiveActions.transport, block))
+        action_plan.append((PrimitiveActions.align, block))
+        action_plan.append((PrimitiveActions.pick, None))
+        action_plan.append((PrimitiveActions.retract, None))
+        return action_plan
+
+    def _depositroutine(self, b_pose):  # pylint: disable=no-self-use
+        """
+        Definition for the high-level method deposit
+
+        input
+        :block: of type knowledge_base.Block
+
+        returns
+        :action_plan: a list of tuples, where 1st element is the name of a
+        PrimitiveAction and 2nd is the related constraint
+        """
+        action_plan = []
+        action_plan.append((PrimitiveActions.transport, b_pose))
+        action_plan.append((PrimitiveActions.align, b_pose))
+        action_plan.append((PrimitiveActions.place, None))
+        action_plan.append((PrimitiveActions.retract, None))
+        return action_plan
+
+    # internal decomposition functions
+    def _mission_decomposition(self):
+        """
+        Use inputs from self._task to decompose it into a tree or list
+        (depending upon if self._multiple_mode is True or False respectively)
+        """
+        pass
+
+    def _plan_decomposition(self):
+        """
+        Use inputs from self._task and self._mission_plan to decompose it into
+        a tree or list (depending upon if self._multiple_mode is True or False
+        respectively)
+        """
+        pass
+
+    # external interface functions
+    def setup(self, task, multiple=False):
         """Extracts plan for task and decomposes
         :return: 1 if plan is foumd, 0 if not
         """
         self._task = task
-        self._multiple_mode = multile
+        self._multiple_mode = multiple
+        self._mission_result = self._mission_decomposition()
         self._result = self._plan_decomposition()
-        if self._result == True:
+        if self._result is True:
             self._action_pointer = 0
         return self._result
 
@@ -171,10 +206,8 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
             pass
         return self._action_plan[self._action_pointer - 1]
 
-    def _plan_decomposition(self):
-        """
-        Use inputs from self._task and self._mission_plan to decompose it into
-        a tree or list (depending upon if self._multiple_mode is True or False
-        respectively)
-        """
-        pass
+    def get_plan(self, task):
+        """Interface for meta-reasoner"""
+        if self._task == task:
+            return self._action_plan
+        return None
