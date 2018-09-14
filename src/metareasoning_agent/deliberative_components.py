@@ -11,6 +11,29 @@ MODULE_LOGGER = logging.getLogger(
     'metareasoning_agent.deliberative_components')
 
 
+def check_availability(plans, blocks):
+    """method to check availability of blocks against plan requirements
+
+    input:
+        plan
+            a list of plans which are dicts of form block: pose
+        blocks
+            a list of blocks available to the agent currently
+    returns:
+        ranked availabilities
+            a list of tuples (plan_idx, boolean availability, length of plan)
+    """
+    result_list = {}
+    for (idx, plan) in enumerate(plans):
+        result_list[idx] = [0, len(plan)]
+        for reqd_block in plan:
+            if reqd_block in blocks:
+                result_list[idx][0] += 1
+        if result_list[idx][0] == result_list[idx][1]:
+            result_list[idx][0] = True
+    return result_list
+
+
 class Planner(object):  # pylint: disable=too-many-instance-attributes
     """Planner class which houses all decomposition rules and task-plans
 
@@ -57,10 +80,8 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         self._logger = logging.getLogger(
             'metareasoning_agent.deliberative_components.Planner')
         # database init
-        self._plan_db = {}
         self._method_db = {}
-        self._mission_rules_dict = {}
-        self._mission_rules_db = []
+        self._mission2method_db = {}
         self._block_list = []
         # state-ful variables
         self._mission_plan = []
@@ -78,9 +99,9 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         """
         pass
 
-    def _populate_block_rules(self):
+    def _populate_method(self):
         """
-        Protected method to fill in the mission decomposition DB
+        Protected method to fill in base methods
 
         The planning hierarchy goes:
             Mission input --> Mission Decomposition based on availability of
@@ -166,10 +187,32 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
     # internal decomposition functions
     def _mission_decomposition(self):
         """
-        Use inputs from self._task to decompose it into a tree or list
-        (depending upon if self._multiple_mode is True or False respectively)
+        Decomposes mission into a list of (block,pose) tuples
+
+        uses:
+            _task - mission input
+            _block_list - to check availability for decomposition
+            _mission2method_db - to traverse through possible decompositions
+
+        returns:
+            True/False - if a decomposition is found/not found
         """
-        pass
+        if self._task in self._mission2method_db:
+            plans = self._mission2method_db[self._task]
+            if plans is not None:
+                ranked_valid_plans = check_availability(
+                    plans, self._block_list)
+                lenmin = 1000
+                minid = -1
+                for key in ranked_valid_plans:
+                    if ranked_valid_plans[key][0] is True and\
+                       ranked_valid_plans[key][1] < lenmin:
+                        lenmin = ranked_valid_plans[key][1]
+                        minid = key
+                if minid != -1:
+                    self._mission_plan = plans[minid]
+                    return True
+        return False
 
     def _plan_decomposition(self):
         """
@@ -186,7 +229,9 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         """
         self._task = task
         self._multiple_mode = multiple
+        # dependent on block availability
         self._mission_result = self._mission_decomposition()
+        # just a general decomposition
         self._result = self._plan_decomposition()
         if self._result is True:
             self._action_pointer = 0
