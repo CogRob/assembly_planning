@@ -211,3 +211,11 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         if self._task == task:
             return self._action_plan
         return None
+
+
+class Learner(object):
+    """Reinforcement learner with q-learning algorithm"""
+
+    def __init__(self, debug=False):
+        self._logger = logging.getLogger(
+            'metareasoning_agent.deliberative_components.Learner')
