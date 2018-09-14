@@ -79,6 +79,45 @@ def print_plan(plan):
         MODULE_LOGGER.debug('%s: %s', str(item[0]), str(item[1]))
 
 
+# routine definitions: global so that both planner and learner can access them
+def acquireroutine(block):  # pylint: disable=no-self-use
+    """
+    Definition for the high-level method acquire
+
+    input
+    :block: of type knowledge_base.Block
+
+    returns
+    :action_plan: a list of tuples, where 1st element is the name of a
+    PrimitiveAction and 2nd is the related constraint
+    """
+    action_plan = []
+    action_plan.append((PrimitiveActions.transport, block))
+    action_plan.append((PrimitiveActions.align, block))
+    action_plan.append((PrimitiveActions.pick, None))
+    action_plan.append((PrimitiveActions.retract, None))
+    return action_plan
+
+
+def depositroutine(b_pose):  # pylint: disable=no-self-use
+    """
+    Definition for the high-level method deposit
+
+    input
+    :block: of type knowledge_base.Block
+
+    returns
+    :action_plan: a list of tuples, where 1st element is the name of a
+    PrimitiveAction and 2nd is the related constraint
+    """
+    action_plan = []
+    action_plan.append((PrimitiveActions.transport, b_pose))
+    action_plan.append((PrimitiveActions.align, b_pose))
+    action_plan.append((PrimitiveActions.place, None))
+    action_plan.append((PrimitiveActions.retract, None))
+    return action_plan
+
+
 class Planner(object):  # pylint: disable=too-many-instance-attributes
     """Planner class which houses all decomposition rules and task-plans
 
@@ -217,46 +256,9 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
             Mission input --> Mission Decomposition based on availability of
             blocks --> Methods which can enable the goal state --> Action Plan
         """
-        self._method_db['acquire'] = self._acquireroutine
-        self._method_db['deposit'] = self._depositroutine
+        self._method_db['acquire'] = acquireroutine
+        self._method_db['deposit'] = depositroutine
         # self._rule_db['nudge'] = self._nudgeroutine
-
-    # routine definitions
-    def _acquireroutine(self, block):  # pylint: disable=no-self-use
-        """
-        Definition for the high-level method acquire
-
-        input
-        :block: of type knowledge_base.Block
-
-        returns
-        :action_plan: a list of tuples, where 1st element is the name of a
-        PrimitiveAction and 2nd is the related constraint
-        """
-        action_plan = []
-        action_plan.append((PrimitiveActions.transport, block))
-        action_plan.append((PrimitiveActions.align, block))
-        action_plan.append((PrimitiveActions.pick, None))
-        action_plan.append((PrimitiveActions.retract, None))
-        return action_plan
-
-    def _depositroutine(self, b_pose):  # pylint: disable=no-self-use
-        """
-        Definition for the high-level method deposit
-
-        input
-        :block: of type knowledge_base.Block
-
-        returns
-        :action_plan: a list of tuples, where 1st element is the name of a
-        PrimitiveAction and 2nd is the related constraint
-        """
-        action_plan = []
-        action_plan.append((PrimitiveActions.transport, b_pose))
-        action_plan.append((PrimitiveActions.align, b_pose))
-        action_plan.append((PrimitiveActions.place, None))
-        action_plan.append((PrimitiveActions.retract, None))
-        return action_plan
 
     # internal decomposition functions
     def _mission_decomposition(self):
@@ -349,5 +351,57 @@ class Learner(object):
     """Reinforcement learner with q-learning algorithm"""
 
     def __init__(self, debug=False):
-        self._logger = logging.getLogger(
-            'metareasoning_agent.deliberative_components.Learner')
+        # get logger
+        self._logger = logging.getLogger(__name__)
+        # action library
+        self._methods = ['a1d1', 'a2d1', 'a1d2', 'a2d2']
+        self._blocks = None
+        # TODO: make constraint = Pose, GripOrientation1or2, Block
+        # to be updated by DelLayer during the switch
+        self._task = None
+        self._missions = None
+        self._method_plans = None
+        self._action_plan = None
+        # search-based max-reward-learning
+        self._episode_pointer = -1
+        self._timestep_pointer = -1
+        # q-tables
+        self._task_table = None  # 1xlen(_missions)
+        self._mission_table = None  # len(_missions)x4 (constraint permutation)
+        # results
+        self._mission_idx = -1
+        self._method_idx = -1
+
+    def setup(self, task, mission_db, method_db):
+        """
+        Setup call for DelLayer passing required info from Planner
+        """
+        self._task = task
+        self._missions = mission_db
+        self._method_plans = method_db
+        # TODO: setup the q-tables
+        # TODO: setup the pointers
+
+    def get_action(self, task):
+        """
+        Call from DelLayer to pass next_action to Agent
+        """
+        if self._timestep_pointer == len(
+                self._missions[self._episode_pointer]):
+            # TODO: episode ended so tally up the total and store into q-table
+            self._episode_pointer += 1
+            self._timestep_pointer = 0
+            # TODO: reset all other variables
+            return None
+        self._timestep_pointer += 1
+        return self._action_plan[self._timestep_pointer - 1]
+
+    def update(self, state):
+        self._blocks = state
+        # TODO: get the reward (internal function for now)
+
+    def calculate_reward(self):
+        """
+        Calculates the shaped reward for current timestep using state and task
+        """
+        # TODO: to implement
