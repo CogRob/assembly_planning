@@ -6,8 +6,6 @@ defining the Lego World
 from enum import Enum
 from geometry_msgs.msg import Pose
 
-COLOR = Enum('COLOR', 'red blue green yellow rainbow')
-
 
 # Enum for fixed primitive actions
 class PrimitiveActions(Enum):
@@ -22,7 +20,7 @@ class PrimitiveActions(Enum):
 class Block(object):
     """Object for defining blocks in the environment"""
 
-    def __init__(self, length, width, color=COLOR.rainbow, pose=Pose()):
+    def __init__(self, length, width, color='none', pose=Pose()):
         self.length = length
         self.width = width
         self.color = color
