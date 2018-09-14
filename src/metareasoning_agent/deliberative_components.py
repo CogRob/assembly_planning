@@ -127,6 +127,7 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         # database init
         self._method_db = {}
         self._mission2method_db = {}
+        # current state of the world
         self._block_list = []
         # state-ful variables
         self._mission_plan = []
