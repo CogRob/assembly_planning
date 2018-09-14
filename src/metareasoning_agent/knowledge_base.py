@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 """
-Central repository of data structures and custom containers for defining the Lego World
+Central repository of data structures and custom containers for
+defining the Lego World
 """
 from enum import Enum
 
-COLOR = Enum('COLOR', 'red blue green yellow')
+COLOR = Enum('COLOR', 'red blue green yellow rainbow')
 
 
-#Enum for fixed primitive actions
+# Enum for fixed primitive actions
 class PrimitiveActions(Enum):
     """Object for communicating planned actions to the agent"""
     pick = 'pick'
@@ -20,15 +21,13 @@ class PrimitiveActions(Enum):
 class Block(object):
     """Object for defining blocks in the environment"""
 
-    def __init__(self, length, width, color):
+    def __init__(self, length, width, color=COLOR.rainbow):
         self.length = length
         self.width = width
         self.color = color
 
     def __eq__(self, other):
         if isinstance(other, Block):
-            return self.color == other.color and\
-            self.length == other.length and\
-            self.width == other.width
+            return self.length == other.length and self.width == other.width
         else:
             raise NotImplementedError
