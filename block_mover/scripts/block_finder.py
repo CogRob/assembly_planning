@@ -517,8 +517,8 @@ class BlockFinder():
 
                     if(self.camera == "top"):
                         cropped_img = np.flip(cropped_img, 0)
-                        block_angle = 0
-                        #block_angle = calc_angle(cropped_img)
+                        #block_angle = 0
+                        block_angle = calc_angle(cropped_img)
                     else:
                         block_angle = calc_angle(cropped_img)
                         #block_angle = rect[2]
@@ -1072,7 +1072,7 @@ def main():
             block_obs_array.ws_obs  = block_finder.ws_block_obs
 
 
-            #block_finder.block_obs_pub.publish(block_obs_array)
+            block_finder.block_obs_pub.publish(block_obs_array)
 
             block_pixel_locs_array = BlockPixelLocArray()
             block_pixel_locs_array.pixel_locs = block_finder.block_pixel_locs
