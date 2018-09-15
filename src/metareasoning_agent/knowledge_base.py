@@ -5,8 +5,9 @@ defining the Lego World
 """
 from enum import Enum
 import networkx as nx
-from geometry_msgs.msg import Point, Pose
+from geometry_msgs.msg import Pose
 from metareasoning_agent.utilities import calculate_pose_diff
+import rospy
 
 
 # Enum for fixed primitive actions
@@ -31,7 +32,7 @@ class Block(object):
 
     def __eq__(self, other):
         if isinstance(other, Block):
-            return self.length == other.length and self.width == other.width
+            return self.length == other.length and self.width == other.width and self.color == other.color
         else:
             raise NotImplementedError
 
@@ -72,22 +73,49 @@ class EnvState(object):
 
     def add_block(self, block):
         """Method to add a new block as a node to the EnvState graph"""
-        self.ws_state.add_node(
-            self._block_cnt + 1,
-            length=block.length,
-            width=block.width,
-            pose=block.pose)
-        self._block_cnt += 1
-        self._update_edges()
+        # Check if the block is already in graph
+        if(self.in_graph(block)):
+            return
+        else:
+            rospy.loginfo("Adding block %s to ws graph", block)
+            self.ws_state.add_node(
+                self._block_cnt,
+                length=block.length,
+                width=block.width,
+                color=block.color,
+                pose=block.pose)
+
+            self._block_cnt += 1
+
+            # Check that the number of nodes has increased
+            if(self.ws_state.number_of_nodes() != self._block_cnt):
+                rospy.logerr("The node wasn't properly added. WTF?!?!")
+            self._update_edges()
 
     def clear(self):
         self.inv_state = []
         self.ws_state.clear()
         self._block_cnt = 0
 
+    def in_graph(self, block):
+        # Checks if a block is already in the graph
+        for node_key in self.ws_state.nodes:
+            node = self.ws_state.nodes[node_key]
+            node_block = Block(
+                length=node['length'], width=node['width'], color=node['color'], pose=node['pose'])
+
+            if(node_block == block):
+                rospy.loginfo("%s is already in the graph!", block)
+                return True
+
+        rospy.loginfo("%s is not in the graph!", block)
+        return False
+
     def _update_edges(self):
         """Method to update edges to the latest block added"""
-        base_node_pose = self.ws_state.nodes[self._block_cnt - 1]['pose']
+        base_node = self.ws_state.nodes[self._block_cnt - 1]
+
+        base_node_pose = base_node['pose']
         for idx in range(0, self._block_cnt - 1):
             target_node_pose = self.ws_state.nodes[idx]['pose']
             pose_diff = calculate_pose_diff(base_node_pose, target_node_pose)
