@@ -717,8 +717,8 @@ class BlockFinder():
                             block_orientation.w = block_orientation_arr[3]
 
                             # Create a marker to visualize in RVIZ
-                            curr_marker = create_block_marker(frame="base", id=len(block_marker_list.markers), position=block_position_p,
-                                                              orientation=block_orientation, length=block_length, width=block_width, block_color=color, transparency=self.transparency)
+                            # curr_marker = create_block_marker(frame="base", id=len(block_marker_list.markers), position=block_position_p,
+                            #                                  orientation=block_orientation, length=block_length, width=block_width, block_color=color, transparency=self.transparency)
 
                             """
                             #rospy.loginfo("Adding new marker and block pose!")
@@ -738,14 +738,14 @@ class BlockFinder():
                                 x=cx, y=cy, theta=block_angle, color=color, length=block_length, width=block_width))
 
                         else:
-                            #rospy.loginfo("No ir_data has been recieved yet!")
+                            # rospy.loginfo("No ir_data has been recieved yet!")
                             pass
                     else:
-                        #rospy.loginfo("Moments aren't large enough!")
+                        # rospy.loginfo("Moments aren't large enough!")
                         pass
                 else:
                     pass
-                    #rospy.loginfo("Contour area is not large enough!")
+                    # rospy.loginfo("Contour area is not large enough!")
 
         self.rect_seg_img = cv_image.copy()
         self.ray_markers = ray_marker_list
@@ -772,10 +772,10 @@ class BlockFinder():
 
     def ir_callback(self, data):
         self.ir_reading = data.range
-        #rospy.loginfo("IR reading: %f", self.ir_reading)
+        # rospy.loginfo("IR reading: %f", self.ir_reading)
 
         if(self.ir_reading > 65):
-            #rospy.loginfo("Invalid IR reading")
+            # rospy.loginfo("Invalid IR reading")
             self.ir_reading = 0.4
 
 
@@ -789,7 +789,7 @@ def remove_table(cv_image):
     # Apply mask to original image
     hsv = cv2.bitwise_and(hsv, hsv, mask=hsv_mask)
 
-    #plt.imshow(cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB))
+    # plt.imshow(cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB))
     # plt.show()
 
     return hsv
@@ -822,7 +822,7 @@ def calc_block_type(block_pix_dim_1, block_pix_dim_2, camera):
         width = block_pix_dim_1
         length = block_pix_dim_2
 
-    #rospy.loginfo("Length: %d Width: %d", length, width)
+    # rospy.loginfo("Length: %d Width: %d", length, width)
 
     if(camera == "top"):
 
@@ -868,9 +868,9 @@ def generate_gripper_mask(hand_cam_image):
 
 
 def calc_ratio(height, width):
-    #rospy.loginfo("Height: %d, Width: %d", h, w)
+    # rospy.loginfo("Height: %d, Width: %d", h, w)
 
-    #rospy.loginfo("Height: %d, Width: %d", height, width)
+    # rospy.loginfo("Height: %d, Width: %d", height, width)
 
     ratio = width / height
 
@@ -934,7 +934,7 @@ def calc_angle(cropped_image):
     if(angle_rad_minor > math.pi/2):
         angle_rad_minor -= math.pi/2
 
-    #rospy.loginfo("Major Axis Angle %f", angle_rad_major)
+    # rospy.loginfo("Major Axis Angle %f", angle_rad_major)
     rospy.loginfo("Minor Axis Angle %f", math.degrees(angle_rad_minor))
 
     """
@@ -947,16 +947,16 @@ def calc_angle(cropped_image):
 
 def calc_center_angle_old(cont, cv_img):
 
-    #img_shape = cv_img.shape
+    # img_shape = cv_img.shape
 
-    #blank_img = np.zeros(img_shape, dtype=np.uint8)
+    # blank_img = np.zeros(img_shape, dtype=np.uint8)
 
-    #cont_img = cv2.drawContours(cv_img, cont, 0, (0, 0, 255), 2)
+    # cont_img = cv2.drawContours(cv_img, cont, 0, (0, 0, 255), 2)
 
     gray_img = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
     edges = cv2.Canny(gray_img, 50, 100, apertureSize=3)
 
-    #cv2.imshow("gray", gray_img)
+    # cv2.imshow("gray", gray_img)
     # TODO: optimize this by only performing operation on subsection of image
     # From https://github.com/osrf/baxter_demos/blob/master/config/object_finder.yaml
     lines = cv2.HoughLinesP(edges, rho=1, theta=0.017,
@@ -1110,7 +1110,7 @@ def main():
 
     while not rospy.is_shutdown():
         if(block_finder.inv_detected_blocks > 0 or block_finder.ws_detected_blocks):
-            #rospy.loginfo("Publishing block location markers")
+            # rospy.loginfo("Publishing block location markers")
 
             rospy.loginfo("There are %d block markers", len(
                 block_finder.block_markers.markers))
@@ -1126,7 +1126,7 @@ def main():
             block_obs_array.inv_obs = block_finder.inv_block_obs
             block_obs_array.ws_obs = block_finder.ws_block_obs
 
-            # block_finder.block_obs_pub.publish(block_obs_array)
+            block_finder.block_obs_pub.publish(block_obs_array)
 
             block_pixel_locs_array = BlockPixelLocArray()
             block_pixel_locs_array.pixel_locs = block_finder.block_pixel_locs
