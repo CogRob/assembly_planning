@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+# !/usr/bin/env python
 import rospy
 import cv2
 import numpy as np
@@ -7,7 +7,7 @@ import math
 import tf
 
 from sensor_msgs.msg import Image, CameraInfo, Range
-from geometry_msgs.msg import Pose, PoseArray, Point, Quaternion, Pose2D
+from geometry_msgs.msg import PoseArray, Point, Quaternion, Pose2D
 from image_geometry import PinholeCameraModel
 from visualization_msgs.msg import Marker, MarkerArray
 from cv_bridge import CvBridge
@@ -37,17 +37,17 @@ TUNE_HSV_VALS = False
 if(TOP_CAM):
     BLU_LOW_HUE = 106
     BLU_HIGH_HUE = 115
-    BLU_LOW_SAT = 25
+    BLU_LOW_SAT = 90
     BLU_HIGH_SAT = 255
     BLU_LOW_VAL = 127
     BLU_HIGH_VAL = 255
 
-    # GRN_LOW_HUE     = 32  # At night...
-    GRN_LOW_HUE = 45   # During daytime...
+    GRN_LOW_HUE = 32  # At night...
+    # GRN_LOW_HUE     = 45   # During daytime...
     GRN_HIGH_HUE = 75
     GRN_LOW_SAT = 30
     GRN_HIGH_SAT = 255
-    GRN_LOW_VAL = 40
+    GRN_LOW_VAL = 30
     GRN_HIGH_VAL = 255
 
     TEAL_LOW_HUE = 90
@@ -55,7 +55,7 @@ if(TOP_CAM):
     TEAL_LOW_SAT = 9
     TEAL_HIGH_SAT = 201
     TEAL_LOW_VAL = 42
-    TEAL_HIGH_VAL = 255
+    TEAL_HIGH_VAL = 25
 
     RED_LOW_HUE_1 = 0
     # RED_HIGH_HUE_1    = 40 # Night time
@@ -325,7 +325,8 @@ class BlockFinder():
 
         self.block_obs = []
 
-        self.detected_blocks = 0
+        self.inv_detected_blocks = 0
+        self.ws_detected_blocks = 0
 
     def publish(self):
         self.pose_pub = rospy.Publisher(
@@ -403,10 +404,10 @@ class BlockFinder():
     '''
 
     def find_blocks(self, cv_image):
-        block_pose_list = []
         block_marker_list = MarkerArray()
         ray_marker_list = MarkerArray()
-        block_obs_list = []
+        inv_block_obs_list = []
+        ws_block_obs_list = []
         block_pixel_locs_list = []
 
         # Enables tuning of HSV thresholds for different lighting conditions
@@ -496,31 +497,27 @@ class BlockFinder():
             # Draw the countours.
             # cv2.drawContours(cv_image, contours, -1, (0,255,0), 3)
 
-            cv2.circle(cv_image, (320, 200), 5, (255, 255, 0), 1)
-            cv2.circle(cv_image, (340, 20), 5, (0, 255, 255), 1)
+            if(self.camera == "right_hand"):
+                if(RES_640x400):
+                    # At 0 Meters
+                    cv2.circle(cv_image, (325, 129), 5, (255, 0, 255), 1)
 
-            if(RES_640x400):
-                # At 0 Meters
-                cv2.circle(cv_image, (325, 129), 5, (255, 0, 255), 1)
+                    # At -0.15 Meters
+                    cv2.circle(cv_image, (330, 94), 5, (255, 255, 0), 1)
 
-                # At -0.15 Meters
-                cv2.circle(cv_image, (330, 94), 5, (255, 255, 0), 1)
-            elif(RES_1280x800):
-                # At 0 Meters
-                cv2.circle(cv_image, (645, 329), 5, (255, 0, 255), 1)
+                elif(RES_1280x800):
+                    # At 0 Meters
+                    cv2.circle(cv_image, (645, 329), 5, (255, 0, 255), 1)
 
-                # At -0.15 Meters
-                cv2.circle(cv_image, (650, 294), 5, (255, 255, 0), 1)
+                    # At -0.15 Meters
+                    cv2.circle(cv_image, (650, 294), 5, (255, 255, 0), 1)
 
-                # At -0.16 Meters
-                cv2.circle(cv_image, (660, 285), 5, (0, 255, 255), 1)
-
-                cv2.line
+                    # At -0.16 Meters
+                    cv2.circle(cv_image, (660, 285), 5, (0, 255, 255), 1)
 
             # rospy.loginfo("Found %d %s objects", num_obj, color)
 
             for contour in contours:
-
                 area = cv2.contourArea(contour)
 
                 if(area > area_min_threshold and area < area_max_threshold):
@@ -536,8 +533,6 @@ class BlockFinder():
                         box = cv2.cv.BoxPoints(rect)
 
                     box = np.int0(box)
-
-                    cv2.drawContours(cv_image, [box], 0, color_vals[color], 2)
 
                     # Pad the outside of cropped image so that images edges
                     # can still effect PCA
@@ -560,15 +555,19 @@ class BlockFinder():
 
                     if(self.camera == "top"):
                         cropped_img = np.flip(cropped_img, 0)
-
-                    block_angle = calc_angle(cropped_img)
+                        block_angle = 0
+                        # block_angle = calc_angle(cropped_img)
+                    else:
+                        block_angle = calc_angle(cropped_img)
+                        # block_angle = rect[2]
+                        rospy.loginfo("Block angle is %f", block_angle)
 
                     # TODO: Is this the same?
                     # block_angle = rect[2]
 
                     rospy.loginfo("Block angle is %f", block_angle)
 
-                    #block_ratio = calc_ratio(rect[1][1], rect[1][0])
+                    # block_ratio = calc_ratio(rect[1][1], rect[1][0])
 
                     block_length, block_width = calc_block_type(
                         rect[1][1], rect[1][0], self.camera)
@@ -589,9 +588,11 @@ class BlockFinder():
                         # print 'cx = ', cx
                         # print 'cy = ', cy
 
-                        #cx = cx - self.camera_model.cx()
-                        #cy = cy - self.camera_model.cy()
+                        # cx = cx - self.camera_model.cx()
+                        # cy = cy - self.camera_model.cy()
 
+                        cv2.drawContours(
+                            cv_image, [box], 0, color_vals[color], 2)
                         cv2.circle(cv_image, (cx, cy), 10,
                                    color_vals[color], 1)
 
@@ -648,8 +649,6 @@ class BlockFinder():
 
                             # rospy.loginfo("Vec: %f, %f, %f", vec[0], vec[1], vec[2])
 
-                            # rospy.loginfo("Distance to object: %f", d)
-
                             d_cam = d * vec
 
                             homog_d_cam = np.concatenate(
@@ -698,7 +697,6 @@ class BlockFinder():
 
                             ray_id += 1
                             # rospy.loginfo("Block position: %f, %f, %f", block_position_arr[0], block_position_arr[1], block_position_arr[2])
-                            # rospy.loginfo("Block type: %s", block_type_string(block_length, block_width))
                             # rospy.loginfo("Block angle: %f", math.degrees(block_angle))
 
                             block_position_p = Point()
@@ -722,16 +720,20 @@ class BlockFinder():
                             curr_marker = create_block_marker(frame="base", id=len(block_marker_list.markers), position=block_position_p,
                                                               orientation=block_orientation, length=block_length, width=block_width, block_color=color, transparency=self.transparency)
 
-                            # rospy.loginfo("Adding new marker and block pose!")
+                            """
+                            #rospy.loginfo("Adding new marker and block pose!")
                             block_marker_list.markers.append(curr_marker)
-                            block_pose_list.append(
-                                Pose(position=block_position_p, orientation=block_orientation))
+                            block_pose_list.append(Pose(position=block_position_p, orientation=block_orientation))
+                            """
 
-                            # TODO: The block angle will still be wrong.
-                            # To correct, need to transform it from the camera
-                            # coordinate to the world frame
-                            block_obs_list.append(BlockObservation(pose=Pose2D(
-                                x=block_position_p.x, y=block_position_p.y, theta=block_angle), color=color, length=block_length, width=block_width))
+                            # TODO: The block angle will still be wrong. Need to transform it from the camera coordinate to the world frame
+                            if(in_workspace((cx, cy))):
+                                ws_block_obs_list.append(BlockObservation(pose=Pose2D(
+                                    x=block_position_p.x, y=block_position_p.y, theta=block_angle), color=color, length=block_length, width=block_width))
+                            else:
+                                inv_block_obs_list.append(BlockObservation(pose=Pose2D(
+                                    x=block_position_p.x, y=block_position_p.y, theta=block_angle), color=color, length=block_length, width=block_width))
+
                             block_pixel_locs_list.append(BlockPixelLoc(
                                 x=cx, y=cy, theta=block_angle, color=color, length=block_length, width=block_width))
 
@@ -749,10 +751,12 @@ class BlockFinder():
         self.ray_markers = ray_marker_list
         self.block_markers = block_marker_list
 
-        self.block_obs = block_obs_list
+        self.inv_block_obs = inv_block_obs_list
+        self.ws_block_obs = ws_block_obs_list
         self.block_pixel_locs = block_pixel_locs_list
 
-        self.detected_blocks = len(block_obs_list)
+        self.inv_detected_blocks = len(inv_block_obs_list)
+        self.ws_detected_blocks = len(ws_block_obs_list)
 
     def hand_cam_info_callback(self, data):
         self.hand_camera_model = PinholeCameraModel()
@@ -809,16 +813,6 @@ def color_to_int(color):
         return COLOR_BLU
 
 
-def find_ray_plane_intersection(ray):
-    # Table plane
-    table_height = -0.1  # In baxter base reference frame
-
-    table_normal = np.array([0, 0, 1])
-    plane_point = np.array([0, 0, -0.1])
-
-# TODO: Need to improve this checking...
-
-
 def calc_block_type(block_pix_dim_1, block_pix_dim_2, camera):
 
     if(block_pix_dim_1 > block_pix_dim_2):
@@ -828,7 +822,7 @@ def calc_block_type(block_pix_dim_1, block_pix_dim_2, camera):
         width = block_pix_dim_1
         length = block_pix_dim_2
 
-    # rospy.loginfo("Length: %d Width: %d", length, width)
+    #rospy.loginfo("Length: %d Width: %d", length, width)
 
     if(camera == "top"):
 
@@ -840,6 +834,8 @@ def calc_block_type(block_pix_dim_1, block_pix_dim_2, camera):
             block_type = (3, 1)
         elif(length > 45 and length <= 60):
             block_type = (4, 1)
+        else:
+            block_type = (5, 1)
     else:
 
         block_ratio = length / width
@@ -847,16 +843,16 @@ def calc_block_type(block_pix_dim_1, block_pix_dim_2, camera):
         if(block_ratio <= 0.4):
             rospy.loginfo(
                 "Block ratio is very small so it's probably not a block..")
-        if(block_ratio > 0.5 and block_ratio <= 1.5):
+        if(block_ratio > 0.5 and block_ratio <= 1.3):
             block_type = (1, 1)
 
-        elif(block_ratio > 1.5 and block_ratio <= 2.3):
+        elif(block_ratio > 1.3 and block_ratio <= 2.1):
             block_type = (2, 1)
 
-        elif(block_ratio > 2.3 and block_ratio <= 3.5):
+        elif(block_ratio > 2.1 and block_ratio <= 3.1):
             block_type = (3, 1)
 
-        elif(block_ratio > 3.5 and block_ratio <= 4.5):
+        elif(block_ratio > 3.1 and block_ratio <= 4.3):
             block_type = (4, 1)
 
         else:
@@ -874,7 +870,7 @@ def generate_gripper_mask(hand_cam_image):
 def calc_ratio(height, width):
     #rospy.loginfo("Height: %d, Width: %d", h, w)
 
-    rospy.loginfo("Height: %d, Width: %d", height, width)
+    #rospy.loginfo("Height: %d, Width: %d", height, width)
 
     ratio = width / height
 
@@ -1027,7 +1023,7 @@ def create_block_marker(frame, id, position, orientation, length, width, block_c
         curr_marker.color.b = 1.0
     else:
         rospy.logerr(
-            "Color %s doesn't have a supported marker yet! you should add one.", color)
+            "Color %s doesn't have a supported marker yet! you should add one.", block_color)
 
     # Alpha value (transparency)
     curr_marker.color.a = transparency
@@ -1070,7 +1066,7 @@ def create_ray_marker(frame, id, point1, point2, ray_color, transparency=1):
         curr_marker.color.b = 1.0
     else:
         rospy.logerr(
-            "Color %s doesn't have a supported marker yet! you should add one.", color)
+            "Color %s doesn't have a supported marker yet! you should add one.", ray_color)
     curr_marker.scale.x = .01
 
     points_list = []
@@ -1103,29 +1099,32 @@ def main():
     block_finder = BlockFinder(camera_name)
     block_finder.subscribe()
     block_finder.publish()
+    if(camera_name == "top"):
+        try:
+            (trans, rot) = block_finder.tf_listener.lookupTransform(
+                "/base", "/camera_link", rospy.Time(0))
+            block_finder.top_to_base_mat = tf.transformations.compose_matrix(
+                translate=trans, angles=tf.transformations.euler_from_quaternion(rot))
+        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+            print("No TF from camera to base is available!")
 
     while not rospy.is_shutdown():
-        if(camera_name == "top"):
-            try:
-                (trans, rot) = block_finder.tf_listener.lookupTransform(
-                    "/base", "/camera_link", rospy.Time(0))
-                block_finder.top_to_base_mat = tf.transformations.compose_matrix(
-                    translate=trans, angles=tf.transformations.euler_from_quaternion(rot))
-            except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
-                print("No TF from camera to base is available!")
-        if(block_finder.detected_blocks > 0):
+        if(block_finder.inv_detected_blocks > 0 or block_finder.ws_detected_blocks):
             #rospy.loginfo("Publishing block location markers")
 
-            #rospy.loginfo("There are %d block markers", len(block_finder.block_markers.markers))
+            rospy.loginfo("There are %d block markers", len(
+                block_finder.block_markers.markers))
             # block_finder.marker_pub.publish(block_finder.block_markers)
 
             # Publish ray from camera lens to detected object
-            #rospy.loginfo("There are %d ray markers", len(block_finder.ray_markers.markers))
+            rospy.loginfo("There are %d ray markers", len(
+                block_finder.ray_markers.markers))
             # block_finder.ray_marker_pub.publish(block_finder.ray_markers)
 
             rospy.loginfo("Publishing block observations")
             block_obs_array = BlockObservationArray()
-            block_obs_array.inv_obs = block_finder.block_obs
+            block_obs_array.inv_obs = block_finder.inv_block_obs
+            block_obs_array.ws_obs = block_finder.ws_block_obs
 
             # block_finder.block_obs_pub.publish(block_obs_array)
 
