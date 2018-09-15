@@ -458,7 +458,7 @@ class Agent(object):
 
                             # TODO: tune motion distance and possibly implement a PID that moves proportionally to the distance from goal
                             new_pose = self.move_camera_in_plane(
-                                motion_angle + math.pi, motion_dist=.008)
+                                motion_angle + math.pi, motion_dist=.006)
                             rospy.sleep(.5)
                         # TODO uncomment after testing once motion is requested
                         else:
