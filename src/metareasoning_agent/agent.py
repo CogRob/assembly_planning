@@ -50,39 +50,6 @@ class Constraints(object):
         return self.block is None and self.position is None and self.orientation is not None
 
 
-class EnvState(object):
-    """List of blocks in inventory + graph describing the blocks in workspace
-
-    Workspace Graph:
-        Node - Blocks placed in the workspace
-        Edge - Spatial relationships between the blocks as they are placed
-
-    Inventory:
-        {bId: [bType, bPose]}:  Dictionary of block IDs with corresponding
-                                block type and that block's geometry_msgs/Pose
-    """
-
-    def __init__(self):
-        self._block_cnt = 0
-        self.ws_state = nx.Graph()
-        self.inv_state = []
-
-    def add_block(self, block_type, block_pose):
-        """Method to add a new block as a node to the EnvState graph"""
-        self.state.add_node(
-            self._block_cnt + 1, bType=block_type, bPose=block_pose)
-        self._block_cnt += 1
-        self._update_edges()
-
-    def _update_edges(self):
-        """Method to update edges to the latest block added"""
-        base_node_pose = self.env.nodes[self._block_cnt - 1]['bPose']
-        for idx in range(0, self._block_cnt - 1):
-            target_node_pose = self.state.nodes[idx]['bPose']
-            pose_diff = calculate_pose_diff(base_node_pose, target_node_pose)
-            self.state.add_edge(self._block_cnt - 1, idx, object=pose_diff)
-
-
 class Agent(object):
     """
     Interface layer between Baxter's hardware, planning and meta-reasoning
@@ -674,7 +641,8 @@ class Agent(object):
 #    """
 #    Borrowed parts from: RSDK Inverse Kinematics Pick and Place Example
 #
-#    Creates an object of type Agent, initializes and tests various implementations
+#    Creates an object of type Agent, initializes and tests various
+#    implementations
 #    """
 #    # create a rosnode
 #    rospy.init_node("agent_test")

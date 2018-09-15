@@ -5,7 +5,6 @@ import rospy
 from geometry_msgs.msg import Point
 
 
-
 def calculate_pose_diff(pose1, pose2):
     """
     Method to store the spatial distance between centroids of two blocks
