@@ -4,7 +4,9 @@ Central repository of data structures and custom containers for
 defining the Lego World
 """
 from enum import Enum
+import networkx as nx
 from geometry_msgs.msg import Pose
+from metareasoning_agent.utilities import calculate_pose_diff
 
 
 # Enum for fixed primitive actions
@@ -35,3 +37,52 @@ class Block(object):
     def __str__(self):
         return self.color + "_" + str(self.width) + "x" + str(
             self.length) + str(self.pose)
+
+
+class EnvState(object):
+    """List of blocks in inventory + graph describing the blocks in workspace
+
+    Workspace Graph:
+        Node - Blocks placed in the workspace
+        Edge - Spatial relationships between the blocks as they are placed
+
+    Inventory:
+        {bId: [bType, bPose]}:  Dictionary of block IDs with corresponding
+                                block type and that block's geometry_msgs/Pose
+    """
+
+    def __init__(self):
+        self._block_cnt = 0
+        self.ws_state = nx.Graph()
+        self.inv_state = []
+
+    def add_block(self, block):
+        """Method to add a new block as a node to the EnvState graph"""
+        self.ws_state.add_node(
+            self._block_cnt + 1,
+            length=block.length,
+            width=block.width,
+            pose=block.pose)
+        self._block_cnt += 1
+        self._update_edges()
+
+    def clear(self):
+        self.inv_state = []
+        self.ws_state.clear()
+        self._block_cnt = 0
+
+    def _update_edges(self):
+        """Method to update edges to the latest block added"""
+        base_node_pose = self.ws_state.nodes[self._block_cnt - 1]['pose']
+        for idx in range(0, self._block_cnt - 1):
+            target_node_pose = self.ws_state.nodes[idx]['pose']
+            pose_diff = calculate_pose_diff(base_node_pose, target_node_pose)
+            self.ws_state.add_edge(self._block_cnt - 1, idx, object=pose_diff)
+
+
+class Task(object):
+    """Structure definition for a task object"""
+
+    def __init__(self, head):
+        self.name = head
+        self.goal = EnvState()
