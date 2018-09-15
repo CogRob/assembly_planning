@@ -1,4 +1,4 @@
-# !/usr/bin/env python
+#!/usr/bin/env python
 import rospy
 import cv2
 import numpy as np
@@ -555,8 +555,8 @@ class BlockFinder():
 
                     if(self.camera == "top"):
                         cropped_img = np.flip(cropped_img, 0)
-                        block_angle = 0
-                        # block_angle = calc_angle(cropped_img)
+                        #block_angle = 0
+                        block_angle = calc_angle(cropped_img)
                     else:
                         block_angle = calc_angle(cropped_img)
                         # block_angle = rect[2]
@@ -716,6 +716,12 @@ class BlockFinder():
                             block_orientation.z = block_orientation_arr[2]
                             block_orientation.w = block_orientation_arr[3]
 
+                            if(self.camera == "top"):
+                                rot_quat = tf.transformations.quaternion_multiply(
+                                    rot, block_orientation)
+                                block_angle = tf.transformations.quaternion_from_euler(
+                                    rot_quat)
+
                             # Create a marker to visualize in RVIZ
                             # curr_marker = create_block_marker(frame="base", id=len(block_marker_list.markers), position=block_position_p,
                             #                                  orientation=block_orientation, length=block_length, width=block_width, block_color=color, transparency=self.transparency)
@@ -846,13 +852,13 @@ def calc_block_type(block_pix_dim_1, block_pix_dim_2, camera):
         if(block_ratio > 0.5 and block_ratio <= 1.3):
             block_type = (1, 1)
 
-        elif(block_ratio > 1.3 and block_ratio <= 2.1):
+        elif(block_ratio > 1.3 and block_ratio <= 2.3):
             block_type = (2, 1)
 
-        elif(block_ratio > 2.1 and block_ratio <= 3.1):
+        elif(block_ratio > 2.3 and block_ratio <= 3.1):
             block_type = (3, 1)
 
-        elif(block_ratio > 3.1 and block_ratio <= 4.3):
+        elif(block_ratio > 3.1 and block_ratio <= 5.3):
             block_type = (4, 1)
 
         else:
