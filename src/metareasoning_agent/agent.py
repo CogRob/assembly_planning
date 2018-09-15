@@ -100,11 +100,11 @@ class Agent(object):
 
     # TODO: Need to add methods which can "push" updates to meta-reasoning
     # TODO: Perception class which interfaces James' stuff with my code
-    def __init__(self, limb, hover_distance_=0, verbose=True):
+    def __init__(self, limb, hover_distance_= 0.0, verbose=True):
         # Baxter specific variables
         self._limb_name = limb
         self._hover_distance = hover_distance_  # in meters
-        self._table_distance = -0.2
+        self._table_distance = -0.11
         self._verbose = verbose  # bool
         self._limb = baxter_interface.Limb(limb)
         self._gripper = baxter_interface.Gripper(limb)
@@ -138,10 +138,10 @@ class Agent(object):
 
         self._overhead_orientation = Quaternion(x=0, y=1, z=0, w=0)
 
-        self._start_postion = Point(x=0.5, y=-0.75, z=0.15)
+        self._start_position = Point(x=0.5, y=-0.75, z=0)
 
         self._start_pose = Pose(
-            position=self._start_postion,
+            position=self._start_position,
             orientation=self._overhead_orientation)
 
         self._start_angles = self.ik_request(self._start_pose)
@@ -300,7 +300,7 @@ class Agent(object):
             cam_center_x = 640
             cam_center_y = 400
             rospy.loginfo("Finding correct block")
-            while (block_angle == None):
+            while (block_angle is None):
                 # First align with blocks major or minor axis
                 for pixel_loc in block_pixel_locs:
                     print(pixel_loc)
@@ -334,7 +334,7 @@ class Agent(object):
             rospy.loginfo(
                 "Sleeping for 1 second before rotating... Check block angle to ensure it is correct"
             )
-            rospy.sleep(10)
+            rospy.sleep(1)
 
             # When align gets called, height should be at 0
             pixel_dist_thresh = 3
@@ -459,7 +459,7 @@ class Agent(object):
                             # TODO: tune motion distance and possibly implement a PID that moves proportionally to the distance from goal
                             new_pose = self.move_camera_in_plane(
                                 motion_angle + math.pi, motion_dist=.008)
-                            rospy.sleep(.1)
+                            rospy.sleep(.5)
                         # TODO uncomment after testing once motion is requested
                         else:
 
@@ -477,25 +477,13 @@ class Agent(object):
         return self._align(block_color, block_length, block_width, axis)
 
     def _retract(self):
-        # Iterative retract until
-        # retrieve current pose from endpoint
-        current_pose = self._limb.endpoint_pose()
-        ik_pose = Pose()
-        ik_pose.position.x = current_pose['position'].x
-        ik_pose.position.y = current_pose['position'].y
-        ik_pose.orientation.x = current_pose['orientation'].x
-        ik_pose.orientation.y = current_pose['orientation'].y
-        ik_pose.orientation.z = current_pose['orientation'].z
-        ik_pose.orientation.w = current_pose['orientation'].w
-        joint_angles = self.ik_request(ik_pose)
-        # servo up from current pose
-        self._guarded_move_to_joint_position(joint_angles)
+        self._ascend()
 
     def _pick(self):
+        self._descend()
+
         # Close the gripper
         self._gripper_close()
-
-        self._ascend()
 
     def _place(self):
         self._descend()
@@ -582,12 +570,10 @@ class Agent(object):
         curr_z = curr_pose.position.z
 
         if (np.fabs(curr_z - self._hover_distance) > 0.01):
-            rospy.error(
-                "z_position should be within 1 cm of %f meters when descend is called",
-                self._hover_distance)
+            rospy.logerr("z_position should be within 1 cm of %f meters when descend is called, but is %f", self._hover_distance, curr_z)
 
         while (curr_z >= self._table_distance):
-            curr_z -= 0.04
+            curr_z -= 0.02
             curr_pose.position.z = curr_z
 
             joint_angles = self.ik_request(curr_pose)
@@ -596,11 +582,12 @@ class Agent(object):
 
     def get_current_pose(self):
         current_pose = self._limb.endpoint_pose()
+
         ik_pose = Pose()
 
         ik_pose.position.x = current_pose['position'].x
         ik_pose.position.y = current_pose['position'].y
-        ik_pose.position.z = current_pose['position'].z + self._hover_distance
+        ik_pose.position.z = current_pose['position'].z
         ik_pose.orientation.x = current_pose['orientation'].x
         ik_pose.orientation.y = current_pose['orientation'].y
         ik_pose.orientation.z = current_pose['orientation'].z
@@ -608,7 +595,7 @@ class Agent(object):
 
         return ik_pose
 
-    def move_camera_in_plane(self, direction, motion_dist=0.01):
+    def move_camera_in_plane(self, direction, motion_dist=0.005):
         if (direction is None):
             return
 
@@ -667,7 +654,7 @@ class Agent(object):
                     self._actions[action](constraints.block, None)
                 elif (constraints.is_position_constraints()):
                     rospy.loginfo("Constraint is a position constraint")
-                    pose_constraint = constraints
+                    pose_constraint = constraints.position
                     self._actions[action](None, pose_constraint)
                 else:
                     rospy.logerr("%s must be passed arguments", action)

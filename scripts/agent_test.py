@@ -27,16 +27,16 @@ def main():
         'desc': "Detecting block locations with top camera" 
         },
         {'action': kb.PrimitiveActions.transport,    
-         'constraints': agent.Constraints( block=kb.Block(length=4, width=1, color="green"), 
-                                        position=None, 
-                                        orientation=0),
-         'desc': "Picking up 1x4 green",
+         'constraints': agent.Constraints(block=kb.Block(length=4, width=1, color="green"), 
+                                          position=None, 
+                                          orientation=0),
+         'desc': "Moving towards 1x4 green",
         },
 
         {'action': kb.PrimitiveActions.align,        
-         'constraints': agent.Constraints( block=kb.Block(length=4, width=1, color="green"),
-                                        position=None,
-                                        orientation=0),
+         'constraints': agent.Constraints(block=kb.Block(length=4, width=1, color="green"),
+                                          position=None,
+                                          orientation=0),
          'desc': "Aligning with 1x4 green",
         },
 
@@ -44,18 +44,23 @@ def main():
          'constraints': agent.Constraints(),
          'desc': "Picking 1x4 green"
         },
+        
+        {'action': kb.PrimitiveActions.retract,         
+         'constraints': agent.Constraints(),
+         'desc': "Retracting..."
+        },
 
         {'action': kb.PrimitiveActions.transport,
-         'constraints': agent.Constraints( block=None,
-                                        position=Point(x = 0, y = -0.3, z = -0.16),
-                                        orientation=0),
+         'constraints': agent.Constraints(block=None,
+                                          position=Point(x=0.75, y = -0.3, z = 0.0),
+                                          orientation=0),
          'desc': "Moving 1x4 green at x=0, y=-0.3, z=-0.16",
         },
 
         {'action': kb.PrimitiveActions.align, 
-         'constraints': agent.Constraints( block=None, 
-                                        position=None, 
-                                        orientation = 0),
+         'constraints': agent.Constraints(block=None, 
+                                          position=None, 
+                                          orientation=0),
          'desc': "Aligning 1x4 green wiht block_orientation 0",
         },
 
@@ -64,10 +69,15 @@ def main():
          'desc': "Placing 1x4 green",
         },
         
+        {'action': kb.PrimitiveActions.retract,         
+         'constraints': agent.Constraints(),
+         'desc': "Retracting..."
+        },
+        
         {'action': kb.PrimitiveActions.transport, 
-         'constraints': agent.Constraints( block=None, 
-                                        position=Point(x=0.5, y=-0.75, z = -0.16),
-                                        orientation = 0),
+         'constraints': agent.Constraints(block=None, 
+                                          position=Point(x=0.75, y=-0.65, z=0.0),
+                                          orientation=0),
          'desc': "Moving back to starting pose",
         },
 
@@ -79,7 +89,6 @@ def main():
 
     while(True):
         action_dict = fake_action_list[i]
-        
         
         if(action_dict is None):
             none_count += 1
