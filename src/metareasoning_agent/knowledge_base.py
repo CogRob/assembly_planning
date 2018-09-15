@@ -15,12 +15,13 @@ class PrimitiveActions(Enum):
     transport = 'transport'
     align = 'align'
     retract = 'retract'
+    detect = 'detect'
 
 
 class Block(object):
     """Object for defining blocks in the environment"""
 
-    def __init__(self, length, width, color, pose):
+    def __init__(self, length, width, color, pose=None):
         self.length = length
         self.width = width
         self.color = color

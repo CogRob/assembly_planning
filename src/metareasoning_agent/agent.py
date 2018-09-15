@@ -12,7 +12,7 @@ import struct
 import baxter_interface
 import rospy
 from baxter_core_msgs.srv import SolvePositionIK, SolvePositionIKRequest
-from geometry_msgs.msg import Pose, PoseStamped, Quaternion
+from geometry_msgs.msg import Pose, PoseStamped, Quaternion, Point
 from std_msgs.msg import Header
 import networkx as nx
 import tf
@@ -23,7 +23,31 @@ from block_mover.msg import BlockObservationArray, BlockObservation, BlockPixelL
 
 
 from metareasoning_agent.knowledge_base import Block, PrimitiveActions
-from metareasoning_agent.utilities import print_pose, calculate_pose_diff
+from metareasoning_agent.utilities import calculate_pose_diff
+
+class Constraints(object):
+    def __init__(self, block=None, position=None, orientation=None):
+        self.block = block
+        self.position = position
+        self.orientation = orientation
+
+        if((self.block is not None and self.orientation is None) or \
+           (self.position is not None and self.orientation is None) or \
+           (self.position is not None and self.block is not None)):
+           rospy.logerr("The constraint you are attempting to make is not valid")
+
+    def is_block_constraints(self):
+        return (self.block is not None) and (self.orientation is not None)
+
+    def is_position_constraints(self):
+        return (self.position is not None) and (self.orientation is not None)
+
+    def is_empty_constraints(self):
+        return self.block is None and self.position is None and self.orientation is None
+    
+    def is_orientation_constraints(self):
+        return self.block is None and self.position is None and self.orientation is not None
+
 
 
 class EnvState(object):
@@ -41,7 +65,6 @@ class EnvState(object):
     def __init__(self):
         self._block_cnt = 0
         self.ws_state = nx.Graph()
-
         self.inv_state = []
 
     def add_block(self, block_type, block_pose):
@@ -49,7 +72,7 @@ class EnvState(object):
         self.state.add_node(
             self._block_cnt + 1, bType=block_type, bPose=block_pose)
         self._block_cnt += 1
-        #self._update_edges()
+        self._update_edges()
 
     def _update_edges(self):
         """Method to update edges to the latest block added"""
@@ -76,10 +99,11 @@ class Agent(object):
 
     # TODO: Need to add methods which can "push" updates to meta-reasoning
     # TODO: Perception class which interfaces James' stuff with my code
-    def __init__(self, limb, hover_distance=0.15, verbose=True):
+    def __init__(self, limb, hover_distance_=0, verbose=True):
         # Baxter specific variables
         self._limb_name = limb
-        self._hover_distance = hover_distance  # in meters
+        self._hover_distance = hover_distance_  # in meters
+        self._table_distance = -0.2
         self._verbose = verbose  # bool
         self._limb = baxter_interface.Limb(limb)
         self._gripper = baxter_interface.Gripper(limb)
@@ -107,8 +131,10 @@ class Agent(object):
             PrimitiveActions.place: self._place,
             PrimitiveActions.retract: self._retract,
             PrimitiveActions.transport: self._transport,
-            PrimitiveActions.align: self._align
+            PrimitiveActions.align: self._align,
+            PrimitiveActions.detect: self._detect,
         }
+
         self._overhead_orientation = Quaternion(
             x = 0,
             y = 1,
@@ -116,19 +142,18 @@ class Agent(object):
             w = 0
         )
 
-        # x=-0.0249590815779,
-        # y=0.999649402929,
-        # z=0.00737916180073,
-        # w=0.00486450832011)
-        self._start_angles = {
-            'right_s0': 0.4398689909261424,
-            'right_s1': -0.6872233929726653,
-            'right_w0': -0.0337475773334791,
-            'right_w1': 1.271670073157008,
-            'right_w2': -1.6409759478404213,
-            'right_e0': 0.018407769454624964,
-            'right_e1': 0.8709175923219437
-        }
+        self._start_postion = Point(
+            x = 0.5,
+            y = -0.75,
+            z = 0.15
+        )
+
+        self._start_pose = Pose(
+            position = self._start_postion,
+            orientation = self._overhead_orientation
+        )
+        
+        self._start_angles = self.ik_request(self._start_pose)
 
         # Meta-reasoning level information
         self._actuation_results = True
@@ -139,25 +164,23 @@ class Agent(object):
         self.curr_pose = None
         self.pixel_locs = []
 
-    def update_block_locations(self):
-        rospy.loginfo("Updating block locations. Waiting for BlockObservationArray...")
-
-        block_obs_msg = rospy.wait_for_message("/block_finder/top/block_obs", BlockObservationArray)
-
-        rospy.loginfo("Received %d block observations", len(block_obs_msg.inv_obs))
-        block_locations = []
-        
-        for block_obs in block_obs_msg.inv_obs:
-            block_locations.append(Block(length=block_obs.length, width=block_obs.width, color=block_obs.color, pose=block_obs.pose))
-
-        self.inv_state = block_locations
-
-
+    
     def subscribe(self):
         hand_cam_pix_sub = rospy.Subscriber("/block_finder/right_hand/block_pixel_locs", BlockPixelLocArray, self.hand_cam_pixel_locs_callback)
 
     def hand_cam_pixel_locs_callback(self, data):
         self.pixel_locs = data.pixel_locs
+
+
+    def _get_updated_pixel_locs(self):
+        rospy.loginfo("Waiting for updated block pixel locations from hand camera...")
+
+        # Update the block pixel locations
+        block_pixel_locs = rospy.wait_for_message("/block_finder/right_hand/block_pixel_locs", BlockPixelLocArray).pixel_locs
+
+        rospy.loginfo("Block pixel locations updated.")
+
+        return block_pixel_locs
 
 
     # BAXTER-specific methods
@@ -231,117 +254,210 @@ class Agent(object):
         self._guarded_move_to_joint_position(joint_angles)
 
     # Methods for primitive actions
+    def _transport(self, block=None, position=None):
+        overhead_pose = Pose()
 
-    def _transport(self, pose):
-        approach = copy.deepcopy(pose)
+        if(block is not None and position is None) :
+            rospy.loginfo("Finding the correct block to transport to above. Looking for a %dx%d %s block", block.width, block.length, block.color)
+            # TODO: We shouldn't have to go through the list of blocks everytime, store in a dictionary in future
+            # Find the location of the block to move towards
+
+
+            for block_loc in self.inv_state:
+                rospy.loginfo("Checking block: %dx%d %s", block_loc.width, block_loc.length, block_loc.color)
+                # Requested block should have same color, width and length
+                if(block_loc.color == block.color and block_loc.width == block.width and block_loc.length == block.length):
+                    print("Location to go to is %f %f", block_loc.pose.x, block_loc.pose.y)
+                    overhead_pose.position=Point(x=block_loc.pose.x, y=block_loc.pose.y, z=self._hover_distance)
+                    overhead_pose.orientation=self._overhead_orientation
+
+        elif(position is not None and block is None):
+            overhead_pose.position=position
+            overhead_pose.orientation=self._overhead_orientation
+
+        else:
+            rospy.loginfo("One of block or position should be None")
+            return
+
+        approach = copy.deepcopy(overhead_pose)
         # approach with a pose the hover-distance above the requested pose
-        approach.position.z = approach.position.z + self._hover_distance
+        approach.position.z = self._hover_distance
         joint_angles = self.ik_request(approach)
         self._guarded_move_to_joint_position(joint_angles)
         
-    def _align(self, block_color, block_length, block_width, block_angle, axis):
-        # When align gets called, height should be at 0
-        pixel_dist_thresh = 5
-        pixel_dist = 0
+    def _align(self, orientation, block=None):
+        if block is None:
+            # This is a place align. Adjust gripper to orientation and return the new pose
+            return self._rotate_gripper(orientation)
             
-        # At 0.0 meters the location of center pixel that will result in optimal grasp
-        # TODO: need to tune these values for higher res (1280x800)
-        # 1280 -> 960
-        # 800  -> 600 * 3/4 
-        # y + 100
-        # x + 240
-        # Possible new values:
-        # upper_pixel_center_x = 325 + 240
-        # upper_pixel_center_y = 129 + 100
-        upper_pixel_center_x = 325
-        upper_pixel_center_y = 129
-
-        # At -0.15 meters the location of center pixel that will result in optimal grasp
-        # Possible new values:
-        # upper_pixel_center_x = 330 + 240
-        # upper_pixel_center_y = 94 + 100
-        lower_pixel_center_x = 330
-        lower_pixel_center_y = 94
-
-        # Rotate block_angle by 90 so that gripper will be perpendicular to blocks major axis
-        if(axis == "major"):
-            rotation_angle = block_angle + math.pi / 2
-        # Just rotate by block angle
         else:
-            rotation_angle = block_angle
+            # This is a pick align. Adjust gripper to orientation and return the new pose
+            block_pixel_locs = self._get_updated_pixel_locs()
+            block_angle = None
         
-        # Clamp block angle between pi and -pi
-        if(rotation_angle + math.pi > math.pi):
-            rotation_angle -= (2 * math.pi) 
-        elif(rotation_angle < -math.pi):
-            rotation_angle += (2 * math.pi) 
-        
-        rospy.loginfo("Rotating gripper by %f degrees", math.degrees(rotation_angle))
-        self._rotate_gripper(block_angle)
-        block_pixel_locs = self.pixel_locs
+            cam_center_x = 640
+            cam_center_y = 400
+            rospy.loginfo("Finding correct block")
+            while(block_angle == None):
+                # First align with blocks major or minor axis 
+                for pixel_loc in block_pixel_locs:
+                    print(pixel_loc)
+                    # Requested block should have same color, width and length
+                    if(pixel_loc.color == block.color and pixel_loc.width == block.width and pixel_loc.length == block.length):
+                        # Also ensure that block is within 100 pixels of camera frame center
+                        block_center_distance = math.sqrt((pixel_loc.x - cam_center_x)**2 + (pixel_loc.y - cam_center_y)**2)
+                        if(block_center_distance > 400):
+                            rospy.loginfo("This is not the block you are looking for... It is too far from the center...")
+                            continue
+                        else:
+                            block_angle = pixel_loc.theta
 
-        # Align at 0.0 meters 
-        while(True):
-            if len(block_locs) > 0:
+                block_pixel_locs = self._get_updated_pixel_locs()
 
-                rospy.loginfo("There are %d blocks in view of hand camera.")
+            
+            if(block_angle is None):
+                rospy.loginfo("No matching block was found! Can't align")
+                return None
             else:
-                rospy.loginfo("There are no blocks in view of hand camera."
+                rospy.loginfo("Aligning with %s colored %dx%d block with angle %f about with orientation %f", block.color, block.width, block.length, block_angle, orientation)
 
-            # Go through each pixel location to find the requested block
-            for pixel_loc in block_pixel_locs:
-                # Requested block should have same color, width and length
-                if(pixel_loc.color == block_color and pixel_loc.width == block_width and pixel_loc.length == block_length):
-                    """ 
-                    # For debugging
-                    rospy.loginfo("Block color (from locs): %s W: %d, L: %d", pixel_loc.color, pixel_loc.width, pixel_loc.length)
-                    rospy.loginfo("Block color: %s W: %d, L: %d", block_color, block_width, block_length)
-                    rospy.loginfo("Block pixel location: x: %f y:%f", pixel_loc.x, pixel_loc.y)
-                    """
-                    
-                    # We found the block we want to allign with
-                    pixel_x_dist = upper_pixel_center_x - pixel_loc.x
-                    pixel_y_dist = upper_pixel_center_y - pixel_loc.y
-                    
-                    # Overall distance
-                    pixel_dist = math.sqrt(pixel_x_dist**2 + pixel_y_dist**2)
-                    rospy.loginfo("Pixel distance is: %f", pixel_x_dist)
 
-                    if(pixel_dist > 100):
-                        rospy.loginfo("Pixel distance is off by 100! Something is wrong!")
-                        return
+            rospy.loginfo("Sleeping for 1 second before rotating... Check block angle to ensure it is correct")
+            rospy.sleep(10)
 
-                    if(pixel_dist > pixel_dist_thresh):
-                        rospy.loginfo("X_DIST: %f, Y_DIST: %f", pixel_x_dist, pixel_y_dist)
+            # When align gets called, height should be at 0
+            pixel_dist_thresh = 3
+            pixel_dist = 0
+                
+            # At 0.0 meters the location of center pixel that will result in optimal grasp
+            # 1280 -> 960
+            # 800  -> 600 * 3/4 
+            # y + 100
+            # x + 240
+            # Possible new values:
+            upper_pixel_center_x = 645 
+            upper_pixel_center_y = 329 
+            #upper_pixel_center_x = 325
+            #upper_pixel_center_y = 129
+
+            # At -0.15 meters the location of center pixel that will result in optimal grasp
+            # Possible new values:
+            #lower_pixel_center_x = 650
+            #lower_pixel_center_y = 294
+            
+            # At -0.16 meters the location of center pixel that will result in optimal grasp
+            # Possible new values:
+            lower_pixel_center_x = 660 
+            lower_pixel_center_y = 285
+            #lower_pixel_center_x = 330
+            #lower_pixel_center_y = 94
+
+
+            #pixel_center_x = upper_pixel_center_x
+            #pixel_center_y = upper_pixel_center_y
+            pixel_center_x = lower_pixel_center_x
+            pixel_center_y = lower_pixel_center_y
+            cam_center_x = 640
+            cam_center_y = 400
+
+
+            # Rotate block_angle by 90 so that gripper will be perpendicular to blocks major axis
+            if(orientation == 1):
+                rotation_angle = block_angle + math.pi / 2 
+            # Just rotate by block angle
+            elif(orientation == 0):
+                rotation_angle = block_angle
+            else:
+                rospy.logerr("Rotation should either be a 1 for 90 degree rotation or a 0 for no rotation")
+            
+            # Clamp block angle between pi and -pi
+            if(rotation_angle > math.pi):
+                rospy.loginfo("Rotation angle > math.pi")
+                rotation_angle -= (2 * math.pi) 
+            elif(rotation_angle < -math.pi):
+                rospy.loginfo("Rotation angle < -math.pi")
+                rotation_angle += (2 * math.pi) 
+            # TODO: Uncomment to enable initial rotation of gripper
+
+            rospy.loginfo("Rotating gripper by %f degrees", math.degrees(rotation_angle))
+            new_pose = self._rotate_gripper(block_angle)
+
+            block_pixel_locs = self._get_updated_pixel_locs()
+
+            # Align at 0.0 meters 
+            while(True):
+                if len(block_pixel_locs) > 0:
+                    rospy.loginfo("There are %d blocks in view of hand camera.", len(block_pixel_locs)) 
+                else: 
+                    rospy.loginfo("There are no blocks in view of hand camera.")
+                
+                # Go through each pixel location to find the requested block
+                for pixel_loc in block_pixel_locs:
+                    # Requested block should have same color, width and length
+                    if(pixel_loc.color == block.color and pixel_loc.width == block.width and pixel_loc.length == block.length):
+                        """ 
+                        # For debugging
+                        rospy.loginfo("Block color (from locs): %s W: %d, L: %d", pixel_loc.color, pixel_loc.width, pixel_loc.length)
+                        rospy.loginfo("Block color: %s W: %d, L: %d", block_color, block_width, block_length)
+                        rospy.loginfo("Block pixel location: x: %f y:%f", pixel_loc.x, pixel_loc.y)
+                        """
                         
-                        motion_angle = math.atan2(-pixel_y_dist, pixel_x_dist) + rotation_angle
+                        # We found the block we want to allign with
+                        pixel_x_dist = pixel_center_x - pixel_loc.x
+                        pixel_y_dist = pixel_center_y - pixel_loc.y
+                        
+                        # Overall distance
+                        pixel_dist = math.sqrt(pixel_x_dist**2 + pixel_y_dist**2)
+                        rospy.loginfo("Pixel distance is: %f", pixel_dist)
 
-                        rospy.loginfo("Pixel distance still larger than threshold. Moving in direction %f degrees", math.degrees(motion_angle))
-                        # TODO: tune motion distance and possibly implement a PID that moves proportionally to the distance from goal
-                        self.move_camera_in_plane(motion_angle, motion_dist = .01)
+                        if(pixel_dist > 200):
+                            rospy.loginfo("Pixel distance is greater that 200. This probably isn't the correct block...")
+                            continue
+
+
+                        # TODO uncomment after testing as a failsafe
+                        """
+                        if(pixel_dist > 100):
+                            rospy.loginfo("Pixel distance is off by 100! Something is wrong!")
+                            return
+                        """
+
+                        if(pixel_dist > pixel_dist_thresh):
+                            rospy.loginfo("X_DIST: %f, Y_DIST: %f", pixel_x_dist, pixel_y_dist)
+                            in_frame_angle = math.atan2(-pixel_y_dist, pixel_x_dist)
+
+
+                            motion_angle = in_frame_angle + rotation_angle
+                            
+                            rospy.loginfo("Within frame angle is: %f", math.degrees(in_frame_angle))
+                            rospy.loginfo("Rotation angle is %f", math.degrees(rotation_angle))
+                            rospy.loginfo("Baxter's motion angle is %f", math.degrees(motion_angle))
+
+                            # TODO: tune motion distance and possibly implement a PID that moves proportionally to the distance from goal
+                            new_pose = self.move_camera_in_plane(motion_angle + math.pi, motion_dist = .008)
+                            rospy.sleep(.1)
+                        # TODO uncomment after testing once motion is requested
+                        else:
+                            
+                            rospy.loginfo("Reached within %f of goal", pixel_dist)
+                            return new_pose
+                        
                     else:
-                        rospy.loginfo("Reached within %f of goal", pixel_dist)
-                        rospy.sleep(10)
-                        return
-                else:
-                    continue
-            rospy.loginfo("Waiting for updated block pixel locations from hand camera...")
+                        continue
 
-            # Update the block pixel locations
-            block_pixel_locs = rospy.wait_for_message("/block_finder/right_hand/block_pixel_locs", BlockPixelLocArray)
-            rospy.loginfo("Block pixel locations updated.")
+                block_pixel_locs = self._get_updated_pixel_locs()
 
     # TODO: For testing purposes to give tester access to private _align(), delete later!
-    def extern_align(self, block_color, block_length, block_width, block_angle, axis):
-        self._align(block_color, block_length, block_width, block_angle, axis)
+    def extern_align(self, block_color, block_length, block_width, axis):
+        return self._align(block_color, block_length, block_width, axis)
 
     def _retract(self):
+        # Iterative retract until
         # retrieve current pose from endpoint
         current_pose = self._limb.endpoint_pose()
         ik_pose = Pose()
         ik_pose.position.x = current_pose['position'].x
         ik_pose.position.y = current_pose['position'].y
-        ik_pose.position.z = current_pose['position'].z + self._hover_distance
         ik_pose.orientation.x = current_pose['orientation'].x
         ik_pose.orientation.y = current_pose['orientation'].y
         ik_pose.orientation.z = current_pose['orientation'].z
@@ -351,40 +467,109 @@ class Agent(object):
         self._guarded_move_to_joint_position(joint_angles)
 
     def _pick(self):
-        # close gripper
+        # Close the gripper
         self._gripper_close()
-        # retract to clear object
-        self._retract()
 
+        self._ascend()
+    
     def _place(self):
+        self._descend()
+
         # open the gripper
         self._gripper_open()
-        # retract to clear object
-        self._retract()
+
+    def _detect(self):
+        rospy.loginfo("Updating block locations. Waiting for BlockObservationArray...")
+
+        block_obs_msg = rospy.wait_for_message("/block_finder/top/block_obs", BlockObservationArray)
+
+        rospy.loginfo("Received %d inventory block observations", len(block_obs_msg.inv_obs))
+        rospy.loginfo("Received %d workspace block observations", len(block_obs_msg.ws_obs))
+
+        inv_block_locations = []
+        ws_block_locations = []
+        
+        # Go through inventory block locations
+        for block_obs in block_obs_msg.inv_obs:
+            inv_block_locations.append(Block(length=block_obs.length, width=block_obs.width, color=block_obs.color, pose=block_obs.pose))
+        
+        # Go through workspace block locations
+        for block_obs in block_obs_msg.ws_obs:
+            ws_block_locations.append(Block(length=block_obs.length, width=block_obs.width, color=block_obs.color, pose=block_obs.pose))
+
+        self.inv_state = inv_block_locations
+        self.ws_state = ws_block_locations
 
     def _rotate_gripper(self, angle):
         # NOTE: angle in radians!
         q_rot = tf.transformations.quaternion_from_euler(angle, 0, 0)
-        curr_q = self._overhead_orientation
-        curr_q_arr = np.array([curr_q.w, curr_q.x, curr_q.y, curr_q.z])
+
+        curr_pose = self.get_current_pose()        
+
+        curr_q_arr = np.array([curr_pose.orientation.w,
+                               curr_pose.orientation.x, 
+                               curr_pose.orientation.y, 
+                               curr_pose.orientation.z])
 
         q_new = tf.transformations.quaternion_multiply(q_rot, curr_q_arr)
-        
-        current_pose = self._limb.endpoint_pose()
-        ik_pose = Pose()
-        ik_pose.position.x = current_pose['position'].x
-        ik_pose.position.y = current_pose['position'].y
-        ik_pose.position.z = current_pose['position'].z
-        ik_pose.orientation.x = q_new[1]
-        ik_pose.orientation.y = q_new[2]
-        ik_pose.orientation.z = q_new[3]
-        ik_pose.orientation.w = q_new[0]
 
-        joint_angles = self.ik_request(ik_pose)
+        curr_pose.orientation.x = q_new[1]
+        curr_pose.orientation.y = q_new[2]
+        curr_pose.orientation.z = q_new[3]
+        curr_pose.orientation.w = q_new[0]
+
+        joint_angles = self.ik_request(curr_pose)
         self._guarded_move_to_joint_position(joint_angles)
 
+        return curr_pose
+    
+
+
+    def _ascend(self):
+        rospy.loginfo("Ascending to %f", self._hover_distance)
+        curr_pose = self.get_current_pose()
+        curr_z = curr_pose.position.z 
+
+        # Go up until the hover distance is reached
+        while(curr_z <= self._hover_distance):
+            curr_z += 0.04
+
+            curr_pose.position.z = curr_z
+            joint_angles = self.ik_request(curr_pose)
+
+            self._guarded_move_to_joint_position(joint_angles)
+        
+    def _descend(self):
+        rospy.loginfo("Descending to %f",self._table_distance)
+        curr_pose = self.get_current_pose()
+        curr_z = curr_pose.position.z 
+
+        if(np.fabs(curr_z - self._hover_distance) > 0.01):
+            rospy.error("z_position should be within 1 cm of %f meters when descend is called", self._hover_distance)
+
+        while(z_curr >= self._table_distance):
+            transport_constraint.position.z = z_curr
+            
+            z_curr -= 0.04
+
+            ik_pose.position.z = z_curr
+            joint_angles = self.ik_request(ik_pose)
+
+            self._guarded_move_to_joint_position(joint_angles)
+
     def get_current_pose(self):
-        return self._limb.endpoint_pose()
+        current_pose = self._limb.endpoint_pose()
+        ik_pose = Pose()
+
+        ik_pose.position.x = current_pose['position'].x
+        ik_pose.position.y = current_pose['position'].y
+        ik_pose.position.z = current_pose['position'].z + self._hover_distance
+        ik_pose.orientation.x = current_pose['orientation'].x
+        ik_pose.orientation.y = current_pose['orientation'].y
+        ik_pose.orientation.z = current_pose['orientation'].z
+        ik_pose.orientation.w = current_pose['orientation'].w
+
+        return ik_pose 
 
     def move_camera_in_plane(self, direction, motion_dist=0.01):
         if(direction is None):
@@ -409,40 +594,52 @@ class Agent(object):
         ik_pose_euler = tf.transformations.euler_from_quaternion(ik_pose_q)
         rospy.loginfo("Roll: %f Pitch: %f Yaw %f", ik_pose_euler[0], ik_pose_euler[1], ik_pose_euler[2])
 
-        ik_pose.position.x = current_pose['position'].x + motion_dist*math.cos(direction) # + ik_pose_euler[2])
-        ik_pose.position.y = current_pose['position'].y + motion_dist*math.sin(direction) # + ik_pose_euler[2])
+        ik_pose.position.x = current_pose['position'].x + motion_dist*math.sin(direction) # + ik_pose_euler[2])
+        ik_pose.position.y = current_pose['position'].y - motion_dist*math.cos(direction) # + ik_pose_euler[2])
         ik_pose.position.z = current_pose['position'].z
 
         joint_angles = self.ik_request(ik_pose)
         self._guarded_move_to_joint_position(joint_angles)
 
-        return ik_pose.position.x, ik_pose.position.y, ik_pose.position.z
+        return ik_pose
 
     # PLANNING interface
-    def executor(self, action, constraints=None):
+    def executor(self, action, constraints=Constraints()):
         """Executor: Interfaces with planner, receives action and actuates Baxter"""
         # if the action does not require constraint, check constraint == None
         if action is PrimitiveActions.pick or \
         action is PrimitiveActions.place or \
-        action is PrimitiveActions.retract:
-            if constraints != None:
+        action is PrimitiveActions.retract or \
+        action is PrimitiveActions.detect:
+            if not constraints.is_empty_constraints():
                 rospy.logerr("%s should not be passed any arguments", action)
             else:
                 self._actions[action]()
         else:
             if action == PrimitiveActions.transport:
-                if isinstance(constraints, Block):
+                # We want to move above a block
+                if constraints.is_block_constraints():
+                    rospy.loginfo("Constraint is a block constraint")
                     # TODO: need a way to distinguish between whether the block
                     # that the gripper is to be transported to is in INV or WS
-                    rospy.logdebug("Not Implemented")
+                    # NOTE: I don't think a block will ever get _transport called 
+                    # on it if unless it is in the invent
+                     
+                    self._actions[action](constraints.block, None)
+                elif(constraints.is_position_constraints()):
+                    rospy.loginfo("Constraint is a position constraint")
+                    pose_constraint = constraints
+                    self._actions[action](None, pose_constraint)
                 else:
-                    pose_constraint = Pose()
-                    pose_constraint.position = constraints
-                    pose_constraint.orientation = self._overhead_orientation
-                    print_pose(pose_constraint)
-                    self._actions[action](pose_constraint)
-            else:
-                rospy.logdebug("Not Implemented")
+                    rospy.logerr("%s must be passed arguments", action)
+            elif action == PrimitiveActions.align:
+                if(constraints.is_block_constraints()):
+                    block_constraint = constraints.block
+                    orientation_constraint = constraints.orientation
+                    # We have a block that we wish to align with
+                    self._actions[action](orientation_constraint, block_constraint)
+                else:
+                    rospy.logerr("%s must be passed arguments", action)
         return
 
 

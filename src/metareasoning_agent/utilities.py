@@ -5,18 +5,6 @@ import rospy
 from geometry_msgs.msg import Point
 
 
-def print_pose(pose_msg):
-    """
-    Utility function for printing geometry_msgs/Pose msgs
-    """
-    rospy.loginfo("x = %s", pose_msg.position.x)
-    rospy.loginfo("y = %s", pose_msg.position.y)
-    rospy.loginfo("z = %s", pose_msg.position.z)
-    rospy.loginfo("qx = %s", pose_msg.orientation.x)
-    rospy.loginfo("qy = %s", pose_msg.orientation.y)
-    rospy.loginfo("qz = %s", pose_msg.orientation.z)
-    rospy.loginfo("qw = %s", pose_msg.orientation.w)
-
 
 def calculate_pose_diff(pose1, pose2):
     """
