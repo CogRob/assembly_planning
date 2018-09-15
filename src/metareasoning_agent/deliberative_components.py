@@ -7,7 +7,8 @@ import logging
 import networkx as nx
 import networkx.algorithms.isomorphism as iso
 from geometry_msgs.msg import Pose
-from metareasoning_agent.knowledge_base import PrimitiveActions, Block
+from metareasoning_agent.knowledge_base import (Block, Constraints, EnvState,
+                                                PrimitiveActions)
 
 MODULE_LOGGER = logging.getLogger(
     'metareasoning_agent.deliberative_components')
@@ -94,8 +95,9 @@ def acquireroutine(block):  # pylint: disable=no-self-use
     PrimitiveAction and 2nd is the related constraint
     """
     action_plan = []
-    action_plan.append((PrimitiveActions.transport, block))
-    action_plan.append((PrimitiveActions.align, block))
+    constraint = Constraints()
+    action_plan.append((PrimitiveActions.transport, constraint))
+    action_plan.append((PrimitiveActions.align, constraint))
     action_plan.append((PrimitiveActions.pick, None))
     action_plan.append((PrimitiveActions.retract, None))
     return action_plan
@@ -113,15 +115,16 @@ def depositroutine(b_pose):  # pylint: disable=no-self-use
     PrimitiveAction and 2nd is the related constraint
     """
     action_plan = []
-    action_plan.append((PrimitiveActions.transport, b_pose))
-    action_plan.append((PrimitiveActions.align, b_pose))
+    constraint = Constraints()
+    action_plan.append((PrimitiveActions.transport, constraint))
+    action_plan.append((PrimitiveActions.align, constraint))
     action_plan.append((PrimitiveActions.place, None))
     action_plan.append((PrimitiveActions.retract, None))
     return action_plan
 
 
 class Planner(object):  # pylint: disable=too-many-instance-attributes
-    """Planner class which houses all decomposition rules and task-plans
+    """Planner class which houses all decomposition rules and task-plan
 
     Important interfacing functions:
     * setup(task, multiple = bool):
@@ -130,7 +133,7 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         plan to task. If found the result = True, otherwise False. setup
         sends the retrieved plan for decomposition to _plan_decomposition()
         which decomposes and stores the sequence of primitive actions in list.
-        A pointer, self_next_action, is initialized which takes care of which
+        A ptr, self_next_action, is initialized which takes care of which
         time-step the execution is at. 'multiple' is a boolean which describes
         if we just need the most optimal decomposition of the task or if a
         decomposition tree should be constructed to be traversed for
@@ -169,7 +172,7 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         self._method_db = {}
         self._mission2method_db = {}
         # current state of the world
-        self._block_list = []
+        self._block_list = None  # type: EnvState
         # state-ful variables
         self._mission_plan = []
         self._action_plan = []
@@ -177,7 +180,7 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         self._result = False
         self._task = None
         self._multiple_mode = False
-        self._action_pointer = -1
+        self._action_ptr = -1
 
     # internal databases
     def generate_database(self):
@@ -300,6 +303,8 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         """
         for pair in self._mission_plan:
             mini_plan = self._method_db[pair[0]](pair[1])
+            # TODO: add a permute_constraints function
+            # to further refine method alts
             self._action_plan.append(mini_plan)
         self._logger.debug('Action plan created of length %d',
                            len(self._action_plan))
@@ -316,7 +321,7 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         # just a general decomposition
         self._result = self._plan_decomposition()
         if self._result is True:
-            self._action_pointer = 0
+            self._action_ptr = 0
         return self._result
 
     def update(self, blocks):
@@ -329,15 +334,15 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         """Return the next action from the plan created for task
         """
         if not (self._multiple_mode):
-            if self._action_pointer == len(self._action_plan) - 1:
+            if self._action_ptr == len(self._action_plan) - 1:
                 return None
-            self._action_pointer += 1
+            self._action_ptr += 1
         else:
             # TODO: here will be checking if all plans have been executed, if
-            # not then reset _action_pointer and continue as usual, but if the
+            # not then reset _action_ptr and continue as usual, but if the
             # plans have ended then send another None and be done with it
             pass
-        return self._action_plan[self._action_pointer - 1]
+        return self._action_plan[self._action_ptr - 1]
 
     def get_plan(self, task):
         """Interface for meta-reasoner"""
