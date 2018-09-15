@@ -21,7 +21,7 @@ import numpy as np
 
 from block_mover.msg import BlockObservationArray, BlockObservation, BlockPixelLocArray, BlockPixelLoc
 
-from metareasoning_agent.knowledge_base import Block, PrimitiveActions
+from metareasoning_agent.knowledge_base import Block, PrimitiveActions, EnvState
 from metareasoning_agent.utilities import calculate_pose_diff
 
 
@@ -31,8 +31,8 @@ class Constraints(object):
         self.position = position
         self.orientation = orientation
 
-        if((self.block is not None and self.orientation is None) or \
-           (self.position is not None and self.orientation is None) or \
+        if((self.block is not None and self.orientation is None) or
+           (self.position is not None and self.orientation is None) or
            (self.position is not None and self.block is not None)):
             rospy.logerr(
                 "The constraint you are attempting to make is not valid")
@@ -67,14 +67,16 @@ class Agent(object):
 
     # TODO: Need to add methods which can "push" updates to meta-reasoning
     # TODO: Perception class which interfaces James' stuff with my code
-    def __init__(self, limb, hover_distance_= 0.0, verbose=True):
+    def __init__(self, limb, hover_distance_=0.0, verbose=True):
         # Baxter specific variables
         self._limb_name = limb
         self._hover_distance = hover_distance_  # in meters
-        self._table_distance = -0.11
+        self._table_distance = -0.10
         self._verbose = verbose  # bool
         self._limb = baxter_interface.Limb(limb)
         self._gripper = baxter_interface.Gripper(limb)
+        self._gripper.set_holding_force(0.1)
+        self._gripper.set_velocity(0.3)
 
         # Baxter system setup
         namespace = "ExternalTools/" + limb + "/PositionKinematicsNode/IKService"
@@ -204,10 +206,15 @@ class Agent(object):
             )
 
     def _gripper_open(self):
+        # TODO: Tune!
         self._gripper.open()
 
-    def _gripper_close(self):
-        self._gripper.close()
+    def _gripper_close(self, width):
+        if(width == 1):
+            self._gripper.command_position(0.75)
+
+        elif(width == 2):
+            self._gripper.command_position(0.9)
 
     def _servo_to_pose(self, pose):
         # servo down to release
@@ -215,7 +222,7 @@ class Agent(object):
         self._guarded_move_to_joint_position(joint_angles)
 
     # Methods for primitive actions
-    def _transport(self, block=None, position=None):
+    def _transport(self, block=None, position=None, orientation=None):
         overhead_pose = Pose()
 
         if (block is not None and position is None):
@@ -241,6 +248,7 @@ class Agent(object):
                     overhead_pose.orientation = self._overhead_orientation
 
         elif (position is not None and block is None):
+
             overhead_pose.position = position
             overhead_pose.orientation = self._overhead_orientation
 
@@ -257,7 +265,10 @@ class Agent(object):
     def _align(self, orientation, block=None):
         if block is None:
             # This is a place align. Adjust gripper to orientation and return the new pose
-            return self._rotate_gripper(orientation)
+            if(orientation == 0):
+                return self._rotate_gripper(0)
+            elif(orientation == 1):
+                return self._rotate_gripper(math.pi/2)
 
         else:
             # This is a pick align. Adjust gripper to orientation and return the new pose
@@ -304,7 +315,7 @@ class Agent(object):
             rospy.sleep(1)
 
             # When align gets called, height should be at 0
-            pixel_dist_thresh = 3
+            pixel_dist_thresh = 5
             pixel_dist = 0
 
             # At 0.0 meters the location of center pixel that will result in optimal grasp
@@ -315,23 +326,23 @@ class Agent(object):
             # Possible new values:
             upper_pixel_center_x = 645
             upper_pixel_center_y = 329
-            #upper_pixel_center_x = 325
-            #upper_pixel_center_y = 129
+            # upper_pixel_center_x = 325
+            # upper_pixel_center_y = 129
 
             # At -0.15 meters the location of center pixel that will result in optimal grasp
             # Possible new values:
-            #lower_pixel_center_x = 650
-            #lower_pixel_center_y = 294
+            # lower_pixel_center_x = 650
+            # lower_pixel_center_y = 294
 
             # At -0.16 meters the location of center pixel that will result in optimal grasp
             # Possible new values:
             lower_pixel_center_x = 660
             lower_pixel_center_y = 285
-            #lower_pixel_center_x = 330
-            #lower_pixel_center_y = 94
+            # lower_pixel_center_x = 330
+            # lower_pixel_center_y = 94
 
-            #pixel_center_x = upper_pixel_center_x
-            #pixel_center_y = upper_pixel_center_y
+            # pixel_center_x = upper_pixel_center_x
+            # pixel_center_y = upper_pixel_center_y
             pixel_center_x = lower_pixel_center_x
             pixel_center_y = lower_pixel_center_y
             cam_center_x = 640
@@ -339,9 +350,11 @@ class Agent(object):
 
             # Rotate block_angle by 90 so that gripper will be perpendicular to blocks major axis
             if (orientation == 1):
+                #rotation_angle = block_angle + math.pi / 2
                 rotation_angle = block_angle + math.pi / 2
             # Just rotate by block angle
             elif (orientation == 0):
+                #rotation_angle = block_angle
                 rotation_angle = block_angle
             else:
                 rospy.logerr(
@@ -381,9 +394,12 @@ class Agent(object):
                             and pixel_loc.length == block.length):
                         """
                         # For debugging
-                        rospy.loginfo("Block color (from locs): %s W: %d, L: %d", pixel_loc.color, pixel_loc.width, pixel_loc.length)
-                        rospy.loginfo("Block color: %s W: %d, L: %d", block_color, block_width, block_length)
-                        rospy.loginfo("Block pixel location: x: %f y:%f", pixel_loc.x, pixel_loc.y)
+                        rospy.loginfo("Block color (from locs): %s W: %d, L: %d",
+                                      pixel_loc.color, pixel_loc.width, pixel_loc.length)
+                        rospy.loginfo("Block color: %s W: %d, L: %d",
+                                      block_color, block_width, block_length)
+                        rospy.loginfo(
+                            "Block pixel location: x: %f y:%f", pixel_loc.x, pixel_loc.y)
                         """
 
                         # We found the block we want to allign with
@@ -404,7 +420,8 @@ class Agent(object):
                         # TODO uncomment after testing as a failsafe
                         """
                         if(pixel_dist > 100):
-                            rospy.loginfo("Pixel distance is off by 100! Something is wrong!")
+                            rospy.loginfo(
+                                "Pixel distance is off by 100! Something is wrong!")
                             return
                         """
 
@@ -425,7 +442,7 @@ class Agent(object):
 
                             # TODO: tune motion distance and possibly implement a PID that moves proportionally to the distance from goal
                             new_pose = self.move_camera_in_plane(
-                                motion_angle + math.pi, motion_dist=.006)
+                                motion_angle + math.pi, motion_dist=.006, height=self._hover_distance)
                             rospy.sleep(.5)
                         # TODO uncomment after testing once motion is requested
                         else:
@@ -450,7 +467,7 @@ class Agent(object):
         self._descend()
 
         # Close the gripper
-        self._gripper_close()
+        self._gripper_close(width=1)
 
     def _place(self):
         self._descend()
@@ -484,12 +501,14 @@ class Agent(object):
 
         # Go through workspace block locations
         for block_obs in block_obs_msg.ws_obs:
-            ws_block_locations.append(
-                Block(
-                    length=block_obs.length,
-                    width=block_obs.width,
-                    color=block_obs.color,
-                    pose=block_obs.pose))
+            new_block = Block(
+                length=block_obs.length,
+                width=block_obs.width,
+                color=block_obs.color,
+                pose=block_obs.pose)
+
+            self._ws.add_block(new_block)
+            ws_block_locations.append(new_block)
 
         self.inv_state = inv_block_locations
         self.ws_state = ws_block_locations
@@ -537,15 +556,19 @@ class Agent(object):
         curr_z = curr_pose.position.z
 
         if (np.fabs(curr_z - self._hover_distance) > 0.01):
-            rospy.logerr("z_position should be within 1 cm of %f meters when descend is called, but is %f", self._hover_distance, curr_z)
+            rospy.logerr(
+                "z_position should be within 1 cm of %f meters when descend is called, but is %f", self._hover_distance, curr_z)
 
         while (curr_z >= self._table_distance):
-            curr_z -= 0.02
+            curr_z -= 0.01
             curr_pose.position.z = curr_z
 
             joint_angles = self.ik_request(curr_pose)
 
             self._guarded_move_to_joint_position(joint_angles)
+
+    def add_block_to_ws(self, block):
+        self._ws.add_block(block)
 
     def get_current_pose(self):
         current_pose = self._limb.endpoint_pose()
@@ -562,7 +585,7 @@ class Agent(object):
 
         return ik_pose
 
-    def move_camera_in_plane(self, direction, motion_dist=0.005):
+    def move_camera_in_plane(self, direction, motion_dist=0.005, height=0.0):
         if (direction is None):
             return
 
@@ -589,7 +612,7 @@ class Agent(object):
             direction)  # + ik_pose_euler[2])
         ik_pose.position.y = current_pose['position'].y - motion_dist * math.cos(
             direction)  # + ik_pose_euler[2])
-        ik_pose.position.z = current_pose['position'].z
+        ik_pose.position.z = height
 
         joint_angles = self.ik_request(ik_pose)
         self._guarded_move_to_joint_position(joint_angles)
@@ -601,9 +624,9 @@ class Agent(object):
         """Executor: Interfaces with planner, receives action and actuates Baxter"""
         # if the action does not require constraint, check constraint == None
         if action is PrimitiveActions.pick or \
-        action is PrimitiveActions.place or \
-        action is PrimitiveActions.retract or \
-        action is PrimitiveActions.detect:
+                action is PrimitiveActions.place or \
+                action is PrimitiveActions.retract or \
+                action is PrimitiveActions.detect:
             if not constraints.is_empty_constraints():
                 rospy.logerr("%s should not be passed any arguments", action)
             else:
@@ -632,12 +655,18 @@ class Agent(object):
                     # We have a block that we wish to align with
                     self._actions[action](orientation_constraint,
                                           block_constraint)
+                elif(constraints.is_orientation_constraints()):
+                    block_constraint = constraints.block
+                    orientation_constraint = constraints.orientation
+                    self._actions[action](orientation_constraint,
+                                          block_constraint)
+
                 else:
                     rospy.logerr("%s must be passed arguments", action)
         return
 
 
-#def test():
+# def test():
 #    """
 #    Borrowed parts from: RSDK Inverse Kinematics Pick and Place Example
 #
