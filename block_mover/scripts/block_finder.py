@@ -41,17 +41,17 @@ TUNE_HSV_VALS = False
 if(TOP_CAM):
     BLU_LOW_HUE     = 106
     BLU_HIGH_HUE    = 115
-    BLU_LOW_SAT     = 25
+    BLU_LOW_SAT     = 90
     BLU_HIGH_SAT    = 255
     BLU_LOW_VAL     = 127
     BLU_HIGH_VAL    = 255
 
-    #GRN_LOW_HUE     = 32  # At night...
-    GRN_LOW_HUE     = 45   # During daytime...
+    GRN_LOW_HUE     = 32  # At night...
+    #GRN_LOW_HUE     = 45   # During daytime...
     GRN_HIGH_HUE    = 75
     GRN_LOW_SAT     = 30
     GRN_HIGH_SAT    = 255
-    GRN_LOW_VAL     = 40
+    GRN_LOW_VAL     = 30
     GRN_HIGH_VAL    = 255
 
     TEAL_LOW_HUE     = 90
@@ -59,7 +59,7 @@ if(TOP_CAM):
     TEAL_LOW_SAT     = 9
     TEAL_HIGH_SAT    = 201
     TEAL_LOW_VAL     = 42
-    TEAL_HIGH_VAL    = 255
+    TEAL_HIGH_VAL    = 25
 
     RED_LOW_HUE_1     = 0
     #RED_HIGH_HUE_1    = 40 # Night time
@@ -307,7 +307,7 @@ class BlockFinder():
         elif(self.camera == "right_hand"):
             self.transparency = 0.5
 
-        self.pub_rate = rospy.Rate(1)
+        self.pub_rate = rospy.Rate(10)
         self.seg_img = {
             "red": np.zeros((800,800,3), dtype=np.uint8),
             "yellow": np.zeros((800,800,3), dtype=np.uint8),
@@ -504,8 +504,8 @@ class BlockFinder():
 
                     if(self.camera == "top"):
                         cropped_img = np.flip(cropped_img, 0)
-                    
-                    block_angle = calc_angle(cropped_img)
+                        block_angle = 0
+                        #block_angle = calc_angle(cropped_img)
 
 
                     #block_ratio = calc_ratio(rect[1][1], rect[1][0])
@@ -514,9 +514,6 @@ class BlockFinder():
 
 
                     if (moms['m00'] > area_min_threshold and moms['m00'] < area_max_threshold):
-                        obj_found = True
-                        
-
                         # print 'cx = ', cx
                         # print 'cy = ', cy
 
@@ -567,13 +564,13 @@ class BlockFinder():
 
                             norm_vec = np.array([0, 0, 1])
 
-                            rospy.loginfo("Vec: %f, %f, %f", vec[0], vec[1], vec[2])
-                            rospy.loginfo("Norm Vec: %f, %f, %f", norm_vec[0], norm_vec[1], norm_vec[2])
+                            #rospy.loginfo("Vec: %f, %f, %f", vec[0], vec[1], vec[2])
+                            #rospy.loginfo("Norm Vec: %f, %f, %f", norm_vec[0], norm_vec[1], norm_vec[2])
 
-                            d_proj = d * np.dot(norm_vec, vec) / (np.linalg.norm(norm_vec) * np.linalg.norm(vec))
+                            #d_proj = d * np.dot(norm_vec, vec) / (np.linalg.norm(norm_vec) * np.linalg.norm(vec))
 
-                            rospy.loginfo("Distance to object: %f", d)
-                            rospy.loginfo("Projected distance to object: %f", d_proj)
+                            #rospy.loginfo("Distance to object: %f", d)
+                            #rospy.loginfo("Projected distance to object: %f", d_proj)
                             
                             d_cam = d * vec
 
@@ -611,8 +608,8 @@ class BlockFinder():
                             )
 
                             ray_id += 1
-                            rospy.loginfo("Block position: %f, %f, %f", block_position_arr[0], block_position_arr[1], block_position_arr[2])
-                            rospy.loginfo("Block type: %s", block_type_string(block_length, block_width))
+                            #rospy.loginfo("Block position: %f, %f, %f", block_position_arr[0], block_position_arr[1], block_position_arr[2])
+                            #rospy.loginfo("Block type: %s", block_type_string(block_length, block_width))
 
                             block_position_p = Point()
                             block_position_arr_copy = block_position_arr.copy()
@@ -633,9 +630,11 @@ class BlockFinder():
                             # Create a marker to visualize in RVIZ 
                             curr_marker = create_block_marker(frame = "base", id = len(block_marker_list.markers), position = block_position_p, orientation=block_orientation, length=block_length, width=block_width, block_color = color, transparency = self.transparency)
 
+                            """
                             #rospy.loginfo("Adding new marker and block pose!")
                             block_marker_list.markers.append(curr_marker)
                             block_pose_list.append(Pose(position=block_position_p, orientation=block_orientation))
+                            """
 
                             # TODO: The block angle will still be wrong. Need to transform it from the camera coordinate to the world frame
                             block_obs_list.append(BlockObservation(pose = Pose2D(x = block_position_p.x, y = block_position_p.y, theta=block_angle), color=color, length=block_length, width=block_width))
@@ -723,7 +722,7 @@ def calc_block_type(block_pix_dim_1, block_pix_dim_2, camera):
         length = block_pix_dim_2
 
 
-    rospy.loginfo("Length: %d Width: %d", length, width)
+    #rospy.loginfo("Length: %d Width: %d", length, width)
 
     if(camera == "top"):
 
@@ -735,6 +734,8 @@ def calc_block_type(block_pix_dim_1, block_pix_dim_2, camera):
             block_type = (3, 1)
         elif(length > 45 and length <= 60):
             block_type = (4, 1)
+        else:
+            block_type = (5, 1)
     else:
 
         block_ratio = length / width
@@ -765,7 +766,7 @@ def generate_gripper_mask(hand_cam_image):
 def calc_ratio(height, width):
     #rospy.loginfo("Height: %d, Width: %d", h, w)
 
-    rospy.loginfo("Height: %d, Width: %d", height, width)
+    #rospy.loginfo("Height: %d, Width: %d", height, width)
 
     ratio = width / height
 
@@ -782,7 +783,7 @@ def calc_angle(cropped_image):
     if(gray is None):
         return 0.0
 
-    print("GRay image type: ", type(gray))
+    #print("GRay image type: ", type(gray))
     h, w = gray.shape
 
     #From a matrix of pixels to a matrix of coordinates of non-black points.
@@ -979,23 +980,24 @@ def main():
     block_finder = BlockFinder(camera_name)
     block_finder.subscribe()
     block_finder.publish()
+    if(camera_name == "top"):
+        try:
+            (trans,rot) = block_finder.tf_listener.lookupTransform("/base", "/camera_link", rospy.Time(0))
+            block_finder.top_to_base_mat = tf.transformations.compose_matrix(translate = trans, angles=tf.transformations.euler_from_quaternion(rot))
+        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+            print("No TF from camera to base is available!")
+
 
     while not rospy.is_shutdown():
-        if(camera_name == "top"):
-            try:
-                (trans,rot) = block_finder.tf_listener.lookupTransform("/base", "/camera_link", rospy.Time(0))
-                block_finder.top_to_base_mat = tf.transformations.compose_matrix(translate = trans, angles=tf.transformations.euler_from_quaternion(rot))
-            except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
-                print("No TF from camera to base is available!")
         if(block_finder.detected_blocks > 0):
             rospy.loginfo("Publishing block location markers")
 
             rospy.loginfo("There are %d block markers", len(block_finder.block_markers.markers))
-            block_finder.marker_pub.publish(block_finder.block_markers)
+            #block_finder.marker_pub.publish(block_finder.block_markers)
 
             # Publish ray from camera lens to detected object
             rospy.loginfo("There are %d ray markers", len(block_finder.ray_markers.markers))
-            block_finder.ray_marker_pub.publish(block_finder.ray_markers)
+            #block_finder.ray_marker_pub.publish(block_finder.ray_markers)
 
 
             rospy.loginfo("Publishing block observations")
@@ -1010,13 +1012,13 @@ def main():
     
         block_finder.rect_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.rect_seg_img))
 
-        block_finder.red_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["red"]))
+        #block_finder.red_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["red"]))
 
-        block_finder.green_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["green"]))
+        #block_finder.green_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["green"]))
 
-        block_finder.yellow_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["yellow"]))
+        #block_finder.yellow_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["yellow"]))
 
-        block_finder.blue_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["blue"]))
+        #block_finder.blue_seg_img_pub.publish(block_finder.bridge.cv2_to_imgmsg(block_finder.seg_img["blue"]))
 
         # Sleep
         block_finder.pub_rate.sleep()
