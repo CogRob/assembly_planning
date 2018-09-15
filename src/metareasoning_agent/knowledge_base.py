@@ -5,7 +5,7 @@ defining the Lego World
 """
 from enum import Enum
 import networkx as nx
-from geometry_msgs.msg import Pose
+from geometry_msgs.msg import Point, Pose
 from metareasoning_agent.utilities import calculate_pose_diff
 
 
@@ -22,7 +22,7 @@ class PrimitiveActions(Enum):
 class Block(object):
     """Object for defining blocks in the environment"""
 
-    def __init__(self, length, width, color='none', pose=Pose()):
+    def __init__(self, length=0, width=0, color='none', pose=Pose()):
         self.length = length
         self.width = width
         self.color = color
@@ -37,6 +37,19 @@ class Block(object):
     def __str__(self):
         return self.color + "_" + str(self.width) + "x" + str(
             self.length) + str(self.pose)
+
+
+class Constraints(object):
+    def __init__(self, block=None, position=None, orientation=None):
+        self.position = position
+        self.block = block
+        self.orientation = orientation
+
+    def is_Block(self):
+        """checking for kind of constraint"""
+        if self.block is not None:
+            return True
+        return False
 
 
 class EnvState(object):
