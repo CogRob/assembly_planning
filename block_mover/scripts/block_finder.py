@@ -113,7 +113,7 @@ if(HAND_CAM):
     RED_HIGH_HUE_1    = 10
     RED_LOW_HUE_2     = 160
     RED_HIGH_HUE_2    = 180
-    RED_LOW_SAT     = 5
+    RED_LOW_SAT     = 30
     RED_HIGH_SAT    = 255
     RED_LOW_VAL     = 20
     RED_HIGH_VAL    = 255
@@ -200,6 +200,8 @@ COLOR_RED = 1
 COLOR_GRN = 2
 COLOR_BLU = 4
 
+RES_1280x800 = True
+RES_640x400 = False
 
 # From https://github.com/botforge/ColorTrackbar
 def nothing(x):
@@ -385,6 +387,7 @@ class BlockFinder():
         height, width, depth = cv_image.shape
         low_s = 0
         low_v = 0
+        pad_size = 0
 
         if(self.camera == "top"):        
             # Remove table from hsv image
@@ -400,10 +403,10 @@ class BlockFinder():
 
         if(self.camera == "right_hand"):
             if(self.ir_reading != None):
-                area_min_threshold = 180 / self.ir_reading
+                area_min_threshold = 400 / self.ir_reading
                 area_max_threshold = 100000 # TODO: tune
             else:
-                area_min_threshold = 180 / 0.4
+                area_min_threshold = 400 / 0.4
                 area_max_threshold = 100000 # TODO: tune
 
         elif(self.camera == "top"):
@@ -457,30 +460,36 @@ class BlockFinder():
             
             num_obj = len(contours) # number of objects found in current frame
 
-            cv2.circle(cv_image, (320, 200), 5, (255, 255, 0), 1)
-            cv2.circle(cv_image, (340, 20), 5, (0, 255, 255), 1)
             
-            
-            # At 0 Meters
-            cv2.circle(cv_image, (325, 129), 5, (255, 0, 255), 1)
+            if(self.camera == "right_hand"):
+                if(RES_640x400):
+                    # At 0 Meters
+                    cv2.circle(cv_image, (325, 129), 5, (255, 0, 255), 1)
 
-            # At -0.15 Meters
-            cv2.circle(cv_image, (330, 94), 5, (255, 255, 0), 1)
+                    # At -0.15 Meters
+                    cv2.circle(cv_image, (330, 94), 5, (255, 255, 0), 1)
+                elif(RES_1280x800):
+                    # At 0 Meters
+                    cv2.circle(cv_image, (645, 329), 5, (255, 0, 255), 1)
 
-            rospy.loginfo("Found %d %s objects", num_obj, color)
+                    # At -0.15 Meters
+                    cv2.circle(cv_image, (650, 294), 5, (255, 255, 0), 1)
+
+                    # At -0.16 Meters
+                    cv2.circle(cv_image, (660, 285), 5, (0, 255, 255), 1)
+
+                    cv2.line
+
+            #rospy.loginfo("Found %d %s objects", num_obj, color)
 
             for contour in contours:
-                moms = cv2.moments(contour)
-                cx = int(moms['m10']/moms['m00'])
-                cy = int(moms['m01']/moms['m00'])
-
-                if(self.camera == "top"):
+                 if(self.camera == "top"):
                     # Block should not be outside of circle centered at 319,255 with radius 200
                     d = math.sqrt((cx - 319)**2 + (cy - 255)**2)
 
                     if(d > 198):
                         continue
-                        
+
                 area = cv2.contourArea(contour)
                 
                 if(area > area_min_threshold and area < area_max_threshold):
@@ -500,20 +509,46 @@ class BlockFinder():
 
                     cv2.drawContours(cv_image, [box], 0, color_vals[color] , 2)
 
-                    cropped_img = masked_img[y-5:y+h+5, x-5:x+w+5]
+                    # Pad the outside of cropped image for more accurate angle finding
+                    x_padded_min = x - pad_size
+                    x_padded_max = x + w + pad_size
+                    y_padded_min = y - pad_size
+                    y_padded_max = y + h + pad_size
+
+                    if x_padded_min < 0:
+                        x_padded_min = 0
+                    if y_padded_min < 0:
+                        y_padded_min = 0
+                    if x_padded_max > width:
+                        x_padded_max = width
+                    if y_padded_max > height:
+                        y_padded_max = height
+
+                    cropped_img = masked_img[y_padded_min:y_padded_max, x_padded_min:x_padded_max]
 
                     if(self.camera == "top"):
                         cropped_img = np.flip(cropped_img, 0)
                         block_angle = 0
                         #block_angle = calc_angle(cropped_img)
+                    else:
+                        block_angle = calc_angle(cropped_img)
+                        #block_angle = rect[2]
+                        rospy.loginfo("Block angle is %f", block_angle)
+                    
 
 
                     #block_ratio = calc_ratio(rect[1][1], rect[1][0])
 
                     block_length, block_width = calc_block_type(rect[1][1], rect[1][0], self.camera)
 
+                    moms = cv2.moments(contour)
 
                     if (moms['m00'] > area_min_threshold and moms['m00'] < area_max_threshold):
+                        obj_found = True
+
+                        cx = int(moms['m10']/moms['m00'])
+                        cy = int(moms['m01']/moms['m00'])
+
                         # print 'cx = ', cx
                         # print 'cy = ', cy
 
@@ -524,6 +559,7 @@ class BlockFinder():
 
                         # Write the block tshape
                         font = cv2.FONT_HERSHEY_SIMPLEX
+
                         if(self.camera == "top"):
                             font_size = 0.5
                             font_thickness = 1
@@ -532,6 +568,8 @@ class BlockFinder():
                             font_thickness = 2 
 
                         cv2.putText(cv_image,block_type_string(block_length, block_width),(cx,cy), font, font_size, color_vals[color], font_thickness)
+
+
 
                         self.pixel_loc = [cx, cy]
                         
@@ -546,6 +584,11 @@ class BlockFinder():
                             new_vec[1] = -vec[0]
                             new_vec[2] = -vec[1]
                             vec = new_vec.copy()
+
+                            if(in_workspace((cx, cy))):
+                                cv2.putText(cv_image,"WS",(cx + 10,cy + 10), font, font_size, color_vals[color], font_thickness)
+                            else:
+                                cv2.putText(cv_image, "INV",(cx + 10,cy + 10), font, font_size, color_vals[color], font_thickness)
 
                         else:
                             # Invalid camera name
@@ -609,7 +652,7 @@ class BlockFinder():
 
                             ray_id += 1
                             #rospy.loginfo("Block position: %f, %f, %f", block_position_arr[0], block_position_arr[1], block_position_arr[2])
-                            #rospy.loginfo("Block type: %s", block_type_string(block_length, block_width))
+                            #rospy.loginfo("Block angle: %f", math.degrees(block_angle))
 
                             block_position_p = Point()
                             block_position_arr_copy = block_position_arr.copy()
@@ -641,12 +684,14 @@ class BlockFinder():
                             block_pixel_locs_list.append(BlockPixelLoc(x=cx, y=cy, theta=block_angle, color=color, length=block_length, width=block_width))
 
                         else:
-                            rospy.loginfo("No ir_data has been recieved yet!")
+                            #rospy.loginfo("No ir_data has been recieved yet!")
+                            pass
                     else:
-                        rospy.loginfo("Moments aren't large enough!")
+                        #rospy.loginfo("Moments aren't large enough!")
+                        pass
                 else:
                     pass
-                    rospy.loginfo("Contour area is not large enough!")
+                    #rospy.loginfo("Contour area is not large enough!")
         
         self.rect_seg_img = cv_image.copy()
         self.ray_markers = ray_marker_list
@@ -690,6 +735,9 @@ def remove_table(cv_image):
 
     return hsv
 
+def in_workspace(point):
+    if(cx < 320):
+        return True
 
 
 def block_type_string(length, width):
@@ -777,13 +825,11 @@ def calc_angle(cropped_image):
     # PCA
     pca_img = cropped_image.copy()
 
-    print("Cropped image type: ", type(cropped_image))
-    gray = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2GRAY)
+    gray = cv2.cvtColor(pca_img, cv2.COLOR_BGR2GRAY)
     
     if(gray is None):
-        return 0.0
+        return None
 
-    #print("GRay image type: ", type(gray))
     h, w = gray.shape
 
     #From a matrix of pixels to a matrix of coordinates of non-black points.
@@ -807,7 +853,6 @@ def calc_angle(cropped_image):
     endpoint1 = tuple(m[0] + e[0]*100)
     endpoint2 = tuple(m[0] + e[1]*50)
     
-    """
     cv2.circle(pca_img, center, 5, 255)
     # Major Axis
     cv2.line(pca_img, center, endpoint1, 255, 4)
@@ -815,19 +860,35 @@ def calc_angle(cropped_image):
     # Minor Axis
     cv2.line(pca_img, center, endpoint2, 255, 4)
 
-    plt.imshow(pca_img)
-    plt.show()
-    """
 
     # Calculate angle of major axis
     major_x = endpoint1[0] - center[0]
     major_y = endpoint1[1] - center[1]
     minor_x = endpoint2[0] - center[0]
     minor_y = endpoint2[1] - center[1]
+    """
+    rospy.loginfo("Major X: %f, Major Y: %f", major_x, -major_y)
+    rospy.loginfo("Minor X: %f, Minor Y: %f", minor_x, -minor_y)
+    """
 
-    angle_rad_major = math.atan2(major_y, major_x)
+    angle_rad_minor = math.atan2(-minor_y, minor_x) # - math.pi/2
+    #angle_rad_major = math.atan2(-major_y, major_x) # - math.pi/2
+    
+    if(angle_rad_minor < -math.pi/2):
+        angle_rad_minor += math.pi
+    if(angle_rad_minor > math.pi/2):
+        angle_rad_minor -= math.pi/2
 
-    return angle_rad_major
+    #rospy.loginfo("Major Axis Angle %f", angle_rad_major)
+    rospy.loginfo("Minor Axis Angle %f", math.degrees(angle_rad_minor))
+
+
+    """
+    plt.imshow(pca_img)
+    plt.show()
+    """
+
+    return angle_rad_minor
 
 def calc_center_angle_old(cont, cv_img):
     
@@ -990,7 +1051,7 @@ def main():
 
     while not rospy.is_shutdown():
         if(block_finder.detected_blocks > 0):
-            rospy.loginfo("Publishing block location markers")
+            #rospy.loginfo("Publishing block location markers")
 
             rospy.loginfo("There are %d block markers", len(block_finder.block_markers.markers))
             #block_finder.marker_pub.publish(block_finder.block_markers)
@@ -1004,7 +1065,7 @@ def main():
             block_obs_array = BlockObservationArray()
             block_obs_array.inv_obs = block_finder.block_obs
 
-            block_finder.block_obs_pub.publish(block_obs_array)
+            #block_finder.block_obs_pub.publish(block_obs_array)
 
             block_pixel_locs_array = BlockPixelLocArray()
             block_pixel_locs_array.pixel_locs = block_finder.block_pixel_locs
