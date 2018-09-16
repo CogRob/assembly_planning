@@ -2,8 +2,9 @@
 """
 Class for rule-based planner for supporting meta-reasoning and agent class
 """
-
+from collections import deque
 import logging
+from Queue import PriorityQueue
 import networkx as nx
 import networkx.algorithms.isomorphism as iso
 from geometry_msgs.msg import Pose
@@ -23,14 +24,14 @@ def check_availability(plans, blocks):
         blocks
             a list of blocks available to the agent currently
     returns:
-        ranked availabilities
-            a list of tuples (plan_idx, boolean availability, length of plan)
+        result_list
+            a dict of plan_idx: boolean availability, length of plan
     """
     result_list = {}
     for (idx, plan) in enumerate(plans):
         result_list[idx] = [0, len(plan)]
         for reqd_block in plan:
-            if reqd_block in blocks:
+            if reqd_block[0] in blocks:
                 result_list[idx][0] += 1
         if result_list[idx][0] == result_list[idx][1]:
             result_list[idx][0] = True
@@ -38,6 +39,7 @@ def check_availability(plans, blocks):
 
 
 def expand_missions(missions):
+    """this is for when we do end-to-end decomposition"""
     # TODO: this needs to be a block to block(s) mapping where the output
     # should be an ordered dictionary with each entry as the sub-goal block
     # and its attribute, i.e. Pose
@@ -49,7 +51,7 @@ def expand_missions(missions):
     # where you access the required Pose of the Block and then
     # map it to a list of blocks whose poses are a function of the
     # input
-    pass
+    return missions
 
 
 def permute_list(items):
@@ -64,26 +66,29 @@ def permute_list(items):
     return permuted_lists
 
 
-def print_blocks(blocks):
+def print_blocks(state):
+    """helper function to print inventory list of EnvState"""
     MODULE_LOGGER.debug('List of blocks:')
-    for (idx, block) in enumerate(blocks):
+    for (idx, block) in enumerate(state.inv_state):
         MODULE_LOGGER.debug('Block %d: %s', idx, str(block))
 
 
 def print_mission(mission):
+    """helper utility to print Mission-level plan"""
     MODULE_LOGGER.debug('Mission is as follows:')
     for item in mission:
         MODULE_LOGGER.debug('Block %s: %s', str(item[0]), str(item[1]))
 
 
 def print_plan(plan):
+    """helper utility to print method/action level plan"""
     MODULE_LOGGER.debug('Plan is as follows:')
     for item in plan:
         MODULE_LOGGER.debug('%s: %s', str(item[0]), str(item[1]))
 
 
 # routine definitions: global so that both planner and learner can access them
-def acquireroutine(block):  # pylint: disable=no-self-use
+def acquireroutine(constraint):  # pylint: disable=no-self-use
     """
     Definition for the high-level method acquire
 
@@ -103,7 +108,7 @@ def acquireroutine(block):  # pylint: disable=no-self-use
     return action_plan
 
 
-def depositroutine(b_pose):  # pylint: disable=no-self-use
+def depositroutine(constraint):  # pylint: disable=no-self-use
     """
     Definition for the high-level method deposit
 
@@ -164,23 +169,30 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         ranked first. Feature precedence: Q-value > |action| .
     """
 
-    def __init__(self, debug):
-        self._debug = debug
+    def __init__(self, ):
         self._logger = logging.getLogger(
             'metareasoning_agent.deliberative_components.Planner')
         # database init
-        self._method_db = {}
+        self._method2action_db = {}
         self._mission2method_db = {}
+        self._task2mission_db = {}
         # current state of the world
-        self._block_list = None  # type: EnvState
+        self._state = None  # type: EnvState
         # state-ful variables
-        self._mission_plan = []
-        self._action_plan = []
+        # element in ranked_mission_idx:
+        # (rank, idx of plan in self._mission_plans)
+        self._ranked_mission_idx = PriorityQueue()
+        self._mission_plans = []
+        self._mission_ptr = -1
+        self._method_plans = []
+        self._method_ptr = -1
+        self._action_plan = []  # only filled when required for method2action
         self._mission_result = False
-        self._result = False
+        self._method_result = False
         self._task = None
         self._multiple_mode = False
-        self._action_ptr = -1
+        self._populate_task2mission_rules()
+        self._populate_method2action()
 
     # internal databases
     def generate_database(self):
@@ -194,13 +206,13 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         # TODO: to implement
         pass
 
-    def _populate_mission_rules(self):
+    def _populate_task2mission_rules(self):
         """
         Decompose from form to block tree
         """
 
         # generating possible missions for task1 - 1x2 over 1x4
-        self._mission2method_db['task1'] = []
+        self._mission2method_db['pyramid'] = []
         # append the 1x2 + 1x4 mission
         pose_1x2 = Pose()
         pose_1x4 = Pose()
@@ -208,7 +220,7 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         plan = []
         plan.append((Block(1, 2), pose_1x2))
         plan.append((Block(1, 4), pose_1x4))
-        self._mission2method_db['task1'].append(permute_list(plan))
+        self._mission2method_db['pyramid'].append(permute_list(plan))
         # append the 1x1 + 1x2 + 1x2 + 1x1 mission
         pose_1x1 = Pose()
         # TODO: fill these damned Poses
@@ -219,7 +231,7 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         plan.append((Block(1, 2), pose_1x2))
         plan.append((Block(1, 2), pose_1x2))
         plan.append((Block(1, 1), pose_1x1))
-        self._mission2method_db['task1'].append(permute_list(plan))
+        self._mission2method_db['pyramid'].append(permute_list(plan))
         # append the 1x1,1x1 over 1x2,1x2 mission
         # TODO: fill these damned Poses
         plan = []
@@ -227,7 +239,7 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         plan.append((Block(1, 2), pose_1x2))
         plan.append((Block(1, 2), pose_1x2))
         plan.append((Block(1, 1), pose_1x1))
-        self._mission2method_db['task1'].append(permute_list(plan))
+        self._mission2method_db['pyramid'].append(permute_list(plan))
         # append the 1x2 over 1x3,1x1 mission
         # TODO: fill these damned Poses
         plan = []
@@ -235,120 +247,139 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         plan.append((Block(1, 2), pose_1x2))
         plan.append((Block(1, 2), pose_1x2))
         plan.append((Block(1, 1), pose_1x1))
-        self._mission2method_db['task1'].append(permute_list(plan))
+        self._mission2method_db['pyramid'].append(permute_list(plan))
 
         # generating possible missions for L-shape task
-        self._mission2method_db['task2'] = []
+        self._mission2method_db['barbell'] = []
         # 2.1 1x4 perp 1x1,1x1
         # TODO: fill these damned Poses
         plan = []
         plan.append((Block(1, 4), pose_1x4))
-        plan.append((Block(1, 1), pose_1x4))
-        plan.append((Block(1, 1), pose_1x4))
-        self._mission2method_db['task2'].append(permute_list(plan))
+        plan.append((Block(1, 1), pose_1x1))
+        plan.append((Block(1, 1), pose_1x1))
+        self._mission2method_db['barbell'].append(permute_list(plan))
         # 2.2 1x3 perp 1x3
         plan = []
         # TODO: fill these damned Poses
         pose_1x3 = Pose()
         plan.append((Block(1, 3), pose_1x3))
-        plan.append((Block(1, 3), pose_1x3))
-        self._mission2method_db['task2'].append(permute_list(plan))
+        plan.append((Block(1, 2), pose_1x2))
+        plan.append((Block(1, 1), pose_1x1))
+        self._mission2method_db['barbell'].append(permute_list(plan))
 
-    def _populate_method(self):
+    def _populate_method2action(self):
         """
         Protected method to fill in base methods
         The planning hierarchy goes:
             Mission input --> Mission Decomposition based on availability of
             blocks --> Methods which can enable the goal state --> Action Plan
         """
-        self._method_db['acquire'] = acquireroutine
-        self._method_db['deposit'] = depositroutine
+        self._method2action_db['acquire'] = acquireroutine
+        self._method2action_db['deposit'] = depositroutine
         # self._rule_db['nudge'] = self._nudgeroutine
 
     # internal decomposition functions
-    def _mission_decomposition(self):
+    def _task2mission_decomposition(self):
         """
         Decomposes mission into a list of (block,pose) tuples
 
         uses:
             _task - mission input
-            _block_list - to check availability for decomposition
+            _state - to check availability for decomposition
             _mission2method_db - to traverse through possible decompositions
 
         returns:
             True/False - if a decomposition is found/not found
         """
-        if self._task in self._mission2method_db:
-            plans = self._mission2method_db[self._task]
-            if plans is not None:
-                ranked_valid_plans = check_availability(
-                    plans, self._block_list)
-                lenmin = 1000
-                minid = -1
-                for key in ranked_valid_plans:
-                    if ranked_valid_plans[key][0] is True and\
-                       ranked_valid_plans[key][1] < lenmin:
-                        lenmin = ranked_valid_plans[key][1]
-                        minid = key
-                if minid != -1:
-                    self._mission_plan = plans[minid]
+        if self._task.name in self._task2mission_db:
+            self._mission_plans = self._task2mission_db[self._task.name]
+            if self._mission_plans is not None:
+                valid_plans = check_availability(self._mission_plans,
+                                                 self._state.inv_state)
+                # next we need to push the valid plans into a PriorityQueue
+                # such that more optimal (action-length wise) missions are
+                # explored first
+                found = False
+                for key in valid_plans:
+                    if valid_plans[key][0] is True:
+                        # insert index of plan in self._mission_plans in a
+                        # priority list
+                        self._ranked_mission_idx.put((valid_plans[key][1],
+                                                      key))
+                if found is True:
                     return True
         return False
 
-    def _plan_decomposition(self):
+    def _mission2method_decomposition(self):
         """
-        Use inputs from self._task and self._mission_plan to decompose it into
-        a tree or list (depending upon if self._multiple_mode is True or False
-        respectively)
+        Decompose each element of self._mission_plan into corresponding
+        method-level plan
         """
-        for pair in self._mission_plan:
-            mini_plan = self._method_db[pair[0]](pair[1])
-            # TODO: add a permute_constraints function
-            # to further refine method alts
-            self._action_plan.append(mini_plan)
-        self._logger.debug('Action plan created of length %d',
-                           len(self._action_plan))
+        for plan in self._mission_plans:
+            decomposed_plan = []
+            # "algorithm" for going from block to method list
+            for (block, pose) in plan:
+                decomposed_plan.append(('acquire', block))
+                decomposed_plan.append(('deposit', block))
+            self._method_plans.append(decomposed_plan)
+            self._logger.debug(
+                'Method plan created of length %d for mission of length %d',
+                len(self._action_plan), len(plan))
+
+    def _method2action_decomposition(self):
+        """Decomposes pointed-to method -> actions and constraints"""
+        # TODO: implement
+        pass
 
     # external interface functions
     def setup(self, task, multiple=False):
-        """Extracts plan for task and decomposes
-        :return: 1 if plan is foumd, 0 if not
+        # type: (Task, bool) -> bool
+        """Creates plan for task and decomposes
+
+        :return: 1 if plan is found, 0 if not
         """
         self._task = task
         self._multiple_mode = multiple
-        # dependent on block availability
-        self._mission_result = self._mission_decomposition()
+        # creates a priorityqueue of plans, dependent on block availability
+        self._mission_result = self._task2mission_decomposition()
         # just a general decomposition
-        self._result = self._plan_decomposition()
-        if self._result is True:
-            self._action_ptr = 0
-        return self._result
+        self._method_result = self._mission2method_decomposition()
+        result = self._mission_result and self._method_result
+        if result is True:
+            self._method_ptr = 0
+            self._mission_ptr = self._ranked_mission_idx.get()[1]
+            self._action_plan = deque(self._method2action_decomposition())
+        return result
 
-    def update(self, blocks):
+    def update(self, obs):
         """incoming interface to update state"""
-        self._block_list = blocks
+        self._state = obs
         self._logger.debug('Block list updated')
-        print_blocks(self._block_list)
+        print_blocks(self._state)
 
     def get_action(self):
         """Return the next action from the plan created for task
         """
-        if not (self._multiple_mode):
-            if self._action_ptr == len(self._action_plan) - 1:
+        if not self._action_plan:
+            # check if all methods are executed, if yes
+            if self._method_ptr == len(self._method_plans[self._mission_ptr]):
+                if self._multiple_mode:
+                    # if multiple mode is True: mission++, method=0
+                    self._mission_ptr = self._ranked_mission_idx.get()[1]
+                    self._method_ptr = 0
+                # else: send in None
                 return None
-            self._action_ptr += 1
-        else:
-            # TODO: here will be checking if all plans have been executed, if
-            # not then reset _action_ptr and continue as usual, but if the
-            # plans have ended then send another None and be done with it
-            pass
-        return self._action_plan[self._action_ptr - 1]
+            self._method_ptr += 1
+            current_method_plan = self._method_plans[self._mission_ptr][
+                self._method_ptr]
+            self._action_plan = deque(current_method_plan)
+        # pop from action queue
+        return self._action_plan.popleft()
 
     def get_plan(self, task):
         """Interface for meta-reasoner"""
-        if self._debug:
-            print_mission(self._mission_plan)
-            print_plan(self._action_plan)
+        print_mission(self._mission_plans[self._mission_ptr])
+        print_plan(self._method_plans[self._mission_ptr])
         if self._task == task:
             return self._action_plan
         return None
