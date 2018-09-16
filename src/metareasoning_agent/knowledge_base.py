@@ -5,7 +5,7 @@ defining the Lego World
 """
 from enum import Enum
 import networkx as nx
-from geometry_msgs.msg import Pose
+from geometry_msgs.msg import Pose, Pose2D
 from metareasoning_agent.utilities import calculate_pose_diff
 import rospy
 
@@ -83,14 +83,17 @@ class EnvState(object):
                 length=block.length,
                 width=block.width,
                 color=block.color,
-                pose=block.pose)
+                pose_x=block.pose.x,
+                pose_y=block.pose.y,
+                pose_theta=block.pose.theta
+            )
 
             self._block_cnt += 1
 
             # Check that the number of nodes has increased
             if(self.ws_state.number_of_nodes() != self._block_cnt):
                 rospy.logerr("The node wasn't properly added. WTF?!?!")
-            self._update_edges()
+            # self._update_edges()
 
     def clear(self):
         self.inv_state = []
@@ -102,7 +105,9 @@ class EnvState(object):
         for node_key in self.ws_state.nodes:
             node = self.ws_state.nodes[node_key]
             node_block = Block(
-                length=node['length'], width=node['width'], color=node['color'], pose=node['pose'])
+                length=node['length'], width=node['width'], color=node['color'],
+                pose=Pose2D(x=node['pose_x'], y=node['pose_y'],
+                            theta=node['pose_theta']))
 
             if(node_block == block):
                 rospy.loginfo("%s is already in the graph!", block)
@@ -111,15 +116,29 @@ class EnvState(object):
         rospy.loginfo("%s is not in the graph!", block)
         return False
 
-    def _update_edges(self):
-        """Method to update edges to the latest block added"""
-        base_node = self.ws_state.nodes[self._block_cnt - 1]
+#    def _update_edges(self):
+#        """Method to update edges to the latest block added"""
+#        base_node = self.ws_state.nodes[self._block_cnt - 1]
+#
+#        base_node_pose_x = base_node['pose_x']
+#        base_node_pose_y = base_node['pose_y']
+#        base_node_pose_theta = base_node['pose_theta']
+#        for idx in range(0, self._block_cnt - 1):
+#            target_node_pose_x = self.ws_state.nodes[idx]['pose_x']
+#            target_node_pose_y = self.ws_state.nodes[idx]['pose_y']
+#            target_node_pose_theta = self.ws_state.nodes[idx]['pose_theta']
+#            pose_diff = calculate_pose_diff(base_node_pose, target_node_pose)
+#            self.ws_state.add_edge(self._block_cnt - 1,
+#                                   idx, del_x=pose_diff.x, del_y=pose_diff.y, del_theta=pose_diff.theta)
 
-        base_node_pose = base_node['pose']
-        for idx in range(0, self._block_cnt - 1):
-            target_node_pose = self.ws_state.nodes[idx]['pose']
-            pose_diff = calculate_pose_diff(base_node_pose, target_node_pose)
-            self.ws_state.add_edge(self._block_cnt - 1, idx, object=pose_diff)
+    def print_graph(self):
+        print("Nodes:")
+        for node_key in self.ws_state.nodes:
+            node = self.ws_state.nodes[node_key]
+            print(node)
+        print("edges")
+        for edge_key in self.ws_state.edges:
+            print self.ws_state.edges[edge_key]
 
 
 class Task(object):
