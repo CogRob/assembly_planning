@@ -76,7 +76,7 @@ class Agent(object):
         self._limb = baxter_interface.Limb(limb)
         self._gripper = baxter_interface.Gripper(limb)
         self._gripper.set_holding_force(0.1)
-        self._gripper.set_velocity(0.3)
+        self._gripper.set_velocity(0.1)
 
         # Baxter system setup
         namespace = "ExternalTools/" + limb + "/PositionKinematicsNode/IKService"
@@ -211,10 +211,10 @@ class Agent(object):
 
     def _gripper_close(self, width):
         if(width == 1):
-            self._gripper.command_position(0.75)
+            self._gripper.command_position(0.65, block=True)
 
         elif(width == 2):
-            self._gripper.command_position(0.9)
+            self._gripper.command_position(0.9, block=True)
 
     def _servo_to_pose(self, pose):
         # servo down to release
@@ -567,6 +567,8 @@ class Agent(object):
 
             self._guarded_move_to_joint_position(joint_angles)
 
+        rospy.sleep(0.5)
+
     def add_block_to_ws(self, block):
         self._ws.add_block(block)
 
@@ -665,6 +667,8 @@ class Agent(object):
                     rospy.logerr("%s must be passed arguments", action)
         return
 
+    def get_ws(self):
+        return self._ws
 
 # def test():
 #    """
