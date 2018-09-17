@@ -35,19 +35,18 @@ TUNE_HSV_VALS = False
 
 # TODO; Store all of these in a param file somewhere
 if(TOP_CAM):
-    BLU_LOW_HUE = 106
-    BLU_HIGH_HUE = 115
-    BLU_LOW_SAT = 90
+    BLU_LOW_HUE = 98  
+    BLU_HIGH_HUE = 118
+    BLU_LOW_SAT = 154
     BLU_HIGH_SAT = 255
-    BLU_LOW_VAL = 127
+    BLU_LOW_VAL = 0
     BLU_HIGH_VAL = 255
 
-    GRN_LOW_HUE = 32  # At night...
-    # GRN_LOW_HUE     = 45   # During daytime...
-    GRN_HIGH_HUE = 75
-    GRN_LOW_SAT = 30
+    GRN_LOW_HUE = 30
+    GRN_HIGH_HUE = 63
+    GRN_LOW_SAT = 91
     GRN_HIGH_SAT = 255
-    GRN_LOW_VAL = 30
+    GRN_LOW_VAL = 0
     GRN_HIGH_VAL = 255
 
     TEAL_LOW_HUE = 90
@@ -58,11 +57,10 @@ if(TOP_CAM):
     TEAL_HIGH_VAL = 25
 
     RED_LOW_HUE_1 = 0
-    # RED_HIGH_HUE_1    = 40 # Night time
-    RED_HIGH_HUE_1 = 20  # Day time
-    RED_LOW_HUE_2 = 130
+    RED_HIGH_HUE_1 = 0 
+    RED_LOW_HUE_2 = 161
     RED_HIGH_HUE_2 = 180
-    RED_LOW_SAT = 25
+    RED_LOW_SAT = 96
     RED_HIGH_SAT = 255
     RED_LOW_VAL = 0
     RED_HIGH_VAL = 255
@@ -74,12 +72,11 @@ if(TOP_CAM):
     YEL_LOW_VAL = 182
     YEL_HIGH_VAL = 255
 
-    TBL_LOW_HUE = 19
-    # TBL_HIGH_HUE    = 32 # At night...
-    TBL_HIGH_HUE = 45  # During day...
-    TBL_LOW_SAT = 0
+    TBL_LOW_HUE = 180
+    TBL_HIGH_HUE = 180
+    TBL_LOW_SAT = 255
     TBL_HIGH_SAT = 255
-    TBL_LOW_VAL = 0
+    TBL_LOW_VAL = 255
     TBL_HIGH_VAL = 255
 
 
@@ -203,77 +200,6 @@ RES_640x400 = False
 # From https://github.com/botforge/ColorTrackbar
 
 
-def nothing(x):
-    pass
-
-
-# From https://github.com/botforge/ColorTrackbar
-def find_hsv_values(img):
-    # optional argument for trackbars
-
-    # named ites for easy reference
-    barsWindow = 'Bars'
-    hl = 'H Low'
-    hh = 'H High'
-    sl = 'S Low'
-    sh = 'S High'
-    vl = 'V Low'
-    vh = 'V High'
-
-    # set up for video capture on camera 0
-
-    # create window for the slidebars
-    cv2.namedWindow(barsWindow, flags=cv2.WINDOW_AUTOSIZE)
-
-    # create the sliders
-    cv2.createTrackbar(hl, barsWindow, 0, 179, nothing)
-    cv2.createTrackbar(hh, barsWindow, 0, 179, nothing)
-    cv2.createTrackbar(sl, barsWindow, 0, 255, nothing)
-    cv2.createTrackbar(sh, barsWindow, 0, 255, nothing)
-    cv2.createTrackbar(vl, barsWindow, 0, 255, nothing)
-    cv2.createTrackbar(vh, barsWindow, 0, 255, nothing)
-
-    # set initial values for sliders
-    cv2.setTrackbarPos(hl, barsWindow, 0)
-    cv2.setTrackbarPos(hh, barsWindow, 179)
-    cv2.setTrackbarPos(sl, barsWindow, 0)
-    cv2.setTrackbarPos(sh, barsWindow, 255)
-    cv2.setTrackbarPos(vl, barsWindow, 0)
-    cv2.setTrackbarPos(vh, barsWindow, 255)
-
-    while(True):
-        frame = img
-        frame = cv2.GaussianBlur(frame, (5, 5), 0)
-
-        # convert to HSV from BGR
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-
-        # read trackbar positions for all
-        hul = cv2.getTrackbarPos(hl, barsWindow)
-        huh = cv2.getTrackbarPos(hh, barsWindow)
-        sal = cv2.getTrackbarPos(sl, barsWindow)
-        sah = cv2.getTrackbarPos(sh, barsWindow)
-        val = cv2.getTrackbarPos(vl, barsWindow)
-        vah = cv2.getTrackbarPos(vh, barsWindow)
-
-        # make array for final values
-        HSVLOW = np.array([hul, sal, val])
-        HSVHIGH = np.array([huh, sah, vah])
-
-        # apply the range on a mask
-        mask = cv2.inRange(hsv, HSVLOW, HSVHIGH)
-        maskedFrame = cv2.bitwise_and(frame, frame, mask=mask)
-
-        # display the camera and masked images
-        cv2.imshow('Masked', maskedFrame)
-        cv2.imshow('Camera', frame)
-
-        # check for q to quit program with 5ms delay
-        if cv2.waitKey(5) & 0xFF == ord('q'):
-            break
-
-    # clean up our resources
-    cv2.destroyAllWindows()
 
 
 class BlockFinder():
@@ -327,6 +253,7 @@ class BlockFinder():
 
         self.inv_detected_blocks = 0
         self.ws_detected_blocks = 0
+        self.curr_image = np.zeros((800, 800, 3), dtype=np.uint8)
 
     def publish(self):
         self.pose_pub = rospy.Publisher(
@@ -389,21 +316,22 @@ class BlockFinder():
                 self.top_cam_info_callback)
 
     def hand_cam_callback(self, data):
-        cv_image = self.bridge.imgmsg_to_cv2(data)
+        self.cv_image = self.bridge.imgmsg_to_cv2(data)
 
-        self.find_blocks(cv_image)
+        self.find_blocks()
 
     def top_cam_callback(self, data):
-        cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
+        self.cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
 
-        self.find_blocks(cv_image)
-
+        self.find_blocks()
+        
     '''
     Thresholds camera image and stores object centroid location (x,y) in 
     Baxter's base frame.
     '''
 
-    def find_blocks(self, cv_image):
+    def find_blocks(self):
+        cv_image = self.cv_image
         block_marker_list = MarkerArray()
         ray_marker_list = MarkerArray()
         inv_block_obs_list = []
@@ -411,11 +339,9 @@ class BlockFinder():
         block_pixel_locs_list = []
 
         # Enables tuning of HSV thresholds for different lighting conditions
-        if(TUNE_HSV_VALS):
-            find_hsv_values(cv_image)
 
         height, width, depth = cv_image.shape
-        pad_size = 0
+        pad_size = 5
 
         if(self.camera == "top"):
             # Remove table from hsv image
@@ -554,9 +480,9 @@ class BlockFinder():
                                              x_padded_min:x_padded_max]
 
                     if(self.camera == "top"):
-                        cropped_img = np.flip(cropped_img, 0)
+                        #cropped_img = np.flip(cropped_img, 0)
                         #block_angle = 0
-                        block_angle = calc_angle(cropped_img)
+                        block_angle = calc_angle(cropped_img) + math.pi/2
                     else:
                         block_angle = calc_angle(cropped_img)
                         # block_angle = rect[2]
@@ -585,15 +511,20 @@ class BlockFinder():
                             if(d > 198):
                                 continue
 
-                        # print 'cx = ', cx
-                        # print 'cy = ', cy
-
                         # cx = cx - self.camera_model.cx()
                         # cy = cy - self.camera_model.cy()
-
+                        print("Color: ", color, " Box: ", box)  
                         cv2.drawContours(
-                            cv_image, [box], 0, color_vals[color], 2)
-                        cv2.circle(cv_image, (cx, cy), 10,
+                            cv_image, [box], 0, color_vals[color], 1)
+                        
+                        # Outlines for Barbell Task
+                        """
+                        cv2.rectangle(cv_image, (216 - 5, 251 + 5), (244 + 5,238 - 5), (0,0,0), 1) 
+                        cv2.rectangle(cv_image, (224 - 5, 301 + 5), (238 + 5,253 - 5), (0,0,0), 1) 
+                        cv2.rectangle(cv_image, (218 - 5, 316 + 5), (244 + 5,303 - 5), (0,0,0), 1) 
+                        """
+
+                        cv2.circle(cv_image, (cx, cy), 3,
                                    color_vals[color], 1)
 
                         # Write the block tshape
@@ -661,6 +592,12 @@ class BlockFinder():
 
                             if(self.camera == "top"):
                                 camera_to_base = self.top_to_base_mat
+                                """
+                                self.tf_listener.waitForTransform(
+                                    '/base', self.camera + "_camera", rospy.Time(), rospy.Duration(4))
+                                (trans, rot) = self.tf_listener.lookupTransform(
+                                    '/base', self.camera + "_camera", rospy.Time())
+                                """
 
                             else:
                                 # Wait for transformation from base to camera as this change as the hand_camera moves
@@ -715,22 +652,26 @@ class BlockFinder():
                             block_orientation.y = block_orientation_arr[1]
                             block_orientation.z = block_orientation_arr[2]
                             block_orientation.w = block_orientation_arr[3]
-
+                            """
                             if(self.camera == "top"):
+                                block_angle += (1.34 - math.pi/2)
+                                
                                 rot_quat = tf.transformations.quaternion_multiply(
                                     rot, block_orientation)
                                 block_angle = tf.transformations.quaternion_from_euler(
                                     rot_quat)
+                            """
+                                
 
                             # Create a marker to visualize in RVIZ
-                            # curr_marker = create_block_marker(frame="base", id=len(block_marker_list.markers), position=block_position_p,
-                            #                                  orientation=block_orientation, length=block_length, width=block_width, block_color=color, transparency=self.transparency)
+                            curr_marker = create_block_marker(frame="base", id=len(block_marker_list.markers), position=block_position_p,
+                                                              orientation=block_orientation, length=block_length, width=block_width, block_color=color, transparency=self.transparency)
 
-                            """
-                            #rospy.loginfo("Adding new marker and block pose!")
+                            rospy.loginfo("Adding new marker")
                             block_marker_list.markers.append(curr_marker)
-                            block_pose_list.append(Pose(position=block_position_p, orientation=block_orientation))
-                            """
+                            
+                            
+                            #block_pose_list.append(Pose(position=block_position_p, orientation=block_orientation))
 
                             # TODO: The block angle will still be wrong. Need to transform it from the camera coordinate to the world frame
                             if(in_workspace((cx, cy))):
@@ -783,6 +724,77 @@ class BlockFinder():
         if(self.ir_reading > 65):
             # rospy.loginfo("Invalid IR reading")
             self.ir_reading = 0.4
+
+    # From https://github.com/botforge/ColorTrackbar
+    def find_hsv_values(self):
+        # optional argument for trackbars
+
+        # named ites for easy reference
+        barsWindow = 'Bars'
+        hl = 'H Low'
+        hh = 'H High'
+        sl = 'S Low'
+        sh = 'S High'
+        vl = 'V Low'
+        vh = 'V High'
+
+        # set up for video capture on camera 0
+
+        # create window for the slidebars
+        cv2.namedWindow(barsWindow, flags=cv2.WINDOW_AUTOSIZE)
+
+        # create the sliders
+        cv2.createTrackbar(hl, barsWindow, 0, 179, nothing)
+        cv2.createTrackbar(hh, barsWindow, 0, 179, nothing)
+        cv2.createTrackbar(sl, barsWindow, 0, 255, nothing)
+        cv2.createTrackbar(sh, barsWindow, 0, 255, nothing)
+        cv2.createTrackbar(vl, barsWindow, 0, 255, nothing)
+        cv2.createTrackbar(vh, barsWindow, 0, 255, nothing)
+
+        # set initial values for sliders
+        cv2.setTrackbarPos(hl, barsWindow, 0)
+        cv2.setTrackbarPos(hh, barsWindow, 179)
+        cv2.setTrackbarPos(sl, barsWindow, 0)
+        cv2.setTrackbarPos(sh, barsWindow, 255)
+        cv2.setTrackbarPos(vl, barsWindow, 0)
+        cv2.setTrackbarPos(vh, barsWindow, 255)
+
+        while(True):
+            frame = self.cv_image
+            frame = cv2.GaussianBlur(frame, (5, 5), 0)
+
+            # convert to HSV from BGR
+            hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+            # read trackbar positions for all
+            hul = cv2.getTrackbarPos(hl, barsWindow)
+            huh = cv2.getTrackbarPos(hh, barsWindow)
+            sal = cv2.getTrackbarPos(sl, barsWindow)
+            sah = cv2.getTrackbarPos(sh, barsWindow)
+            val = cv2.getTrackbarPos(vl, barsWindow)
+            vah = cv2.getTrackbarPos(vh, barsWindow)
+
+            # make array for final values
+            HSVLOW = np.array([hul, sal, val])
+            HSVHIGH = np.array([huh, sah, vah])
+
+            # apply the range on a mask
+            mask = cv2.inRange(hsv, HSVLOW, HSVHIGH)
+            maskedFrame = cv2.bitwise_and(frame, frame, mask=mask)
+
+            # display the camera and masked images
+            cv2.imshow('Masked', maskedFrame)
+            cv2.imshow('Camera', frame)
+
+            # check for q to quit program with 5ms delay
+            if cv2.waitKey(5) & 0xFF == ord('q'):
+                break
+
+        # clean up our resources
+        cv2.destroyAllWindows()
+
+def nothing(x):
+    pass
 
 
 def remove_table(cv_image):
@@ -1103,8 +1115,13 @@ def main():
     rospy.init_node('block_finder' + camera_name)
 
     block_finder = BlockFinder(camera_name)
+
     block_finder.subscribe()
     block_finder.publish()
+
+    if(TUNE_HSV_VALS):
+        block_finder.find_hsv_values()
+
     if(camera_name == "top"):
         try:
             (trans, rot) = block_finder.tf_listener.lookupTransform(
@@ -1115,13 +1132,19 @@ def main():
             print("No TF from camera to base is available!")
 
     while not rospy.is_shutdown():
-        if(block_finder.inv_detected_blocks > 0 or block_finder.ws_detected_blocks):
+        if(block_finder.inv_detected_blocks > 0 or block_finder.ws_detected_blocks > 0):
             # rospy.loginfo("Publishing block location markers")
 
             rospy.loginfo("There are %d block markers", len(
                 block_finder.block_markers.markers))
-            # block_finder.marker_pub.publish(block_finder.block_markers)
+            block_finder.marker_pub.publish(block_finder.block_markers)
 
+            #curr_marker = create_block_marker(frame="base", id=len(block_marker_list.markers), position=block_position_p,
+            #                                       orientation=block_orientation, length=block_length, width=block_width, block_color=color, transparency=self.transparency)
+
+            rospy.loginfo("Adding new marker")
+            #block_marker_list.markers.append(curr_marker)
+            
             # Publish ray from camera lens to detected object
             rospy.loginfo("There are %d ray markers", len(
                 block_finder.ray_markers.markers))
