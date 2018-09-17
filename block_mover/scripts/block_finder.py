@@ -26,7 +26,6 @@ else:
     TOP_CAM = False
     HAND_CAM = True
 
-
 # To enable HSV values that were trained in gazebo
 SIM = False
 
