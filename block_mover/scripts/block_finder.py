@@ -81,7 +81,6 @@ if(TOP_CAM):
     TBL_LOW_VAL = 0
     TBL_HIGH_VAL = 255
 
-
 if(HAND_CAM):
     BLU_LOW_HUE = 90
     BLU_HIGH_HUE = 133
@@ -304,6 +303,7 @@ class BlockFinder():
                 self.top_to_base_mat = tf.transformations.compose_matrix(
                     translate=trans,
                     angles=tf.transformations.euler_from_quaternion(rot))
+
             except (tf.LookupException, tf.ConnectivityException):
                 rospy.loginfo("No transform from base to camera available!")
 
@@ -350,10 +350,12 @@ class BlockFinder():
         self.rect_seg_img_pub = rospy.Publisher(
             "block_finder/" + self.camera + "/rect_segmented_image", Image,
             queue_size=1)
+
         # The detected poses of markers
         self.marker_pub = rospy.Publisher(
             "block_finder/" + self.camera + "/block_markers", MarkerArray,
             queue_size=1)
+
         # Rays from the camera to detected blocks
         self.ray_marker_pub = rospy.Publisher(
             "block_finder/" + self.camera + "/image_rays", MarkerArray,

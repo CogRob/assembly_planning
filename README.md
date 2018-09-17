@@ -3,6 +3,7 @@
 ### TODO
 ### Bug Fixes
 * Fix the block angle issues
+* Fix Erosion
 
 ### Making Code More Robust
 * Lighting issues
@@ -10,6 +11,8 @@
     * Diffuse the Fluorescent lights in lab center Baxter with tarp
 
 * Create a debugging flag to remove all components not necessary for functionality to improve framerate of block finder
+
+
 
 ### Code Organization
 * Split block_finder into two modules: top_block_detector.py and hand_block_detector.py (These can both inherit from a BlockDetector Class)
@@ -24,7 +27,7 @@
 * Add instructions for use to this README
 
 ### Nice to Haves
-* Make RViz Block markers Look like blocks 
+* Make RViz Block markers Look like blocks
 
 
 
