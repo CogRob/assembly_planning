@@ -132,9 +132,10 @@ class BlockDetector():
 
     def cam_callback(self, data):
         self.curr_image = self.cv_bridge.imgmsg_to_cv2(data)
-        self.find_blocks(self)
+        self.detect_blocks(self)
 
     def detect_blocks(self):
+        detected_blocks = []
         for color in self.colors:
             # Threshold based on HSV
             masked_image = hsv_threshold_image(self.curr_image, color,
@@ -177,43 +178,47 @@ class BlockDetector():
                 # Check that contour area is within thresholds
                 if(contour_area > self.blob_area_min_thresh and
                    contour_area < self.blob_area_max_thresh):
-                    block_angle = min_area_rect[2]
-                    rospy.loginfo("Contour angle: %f (rad) %f in (deg)",
-                                  math.radians(contour_angle),
-                                  math.degrees(contour_angle))
-
-                    if(self.opencv3):
-                        bounding_box = np.int0(cv2.boxPoints(min_area_rect))
-                    else:
-                        bounding_box = np.int0(cv2.cv.BoxPoints(min_area_rect))
-                else:
+               else:
                     rospy.loginfo(
                         "Contour area was too small, probably not a block.")
 
-            block_length, block_width = calc_block_type(
-                min_area_rect, self.camera_height)
-
-            detected_blocks.append(
-                Block(color, center, min_area_rect, block_length, block_width,
-                      block_angle))
+            detected_blocks.append((color, min_area_rect))
 
         return detected_blocks
 
-    def draw_detected_blocks(self, detected_blocks):
-        for block in detected_blocks:
-            # Draw block
-            pass
+    def draw_detected_blocks(self, image, detected_blocks):
+        for color, min_area_rect in detected_blocks:
+            # Draw bounding box in color
+            if(self.opencv3):
+                bounding_box = np.int0(cv2.boxPoints(min_area_rect))
+            else:
+                bounding_box = np.int0(cv2.cv.BoxPoints(min_area_rect))
 
+            cv2.drawContours(img, [bounding_box], 0, self.colors[color][color_val], 2)
+ 
+            # Draw center of bounding box
+            cv2.circle(img, min_area_rect[0], 3, self.colors[color][color_val], 1)
 
-def calc_block_type(min_area_rect, camera_height):
+            # Write the ratio
+            if(box[1][0] > block[1][1]):
+                block_ratio = block[1][0] / block[1][1]
+            else:
+                block_ratio = block[1][1] / block[1][0]
 
-    pass
+            # Calculate the block angle
+            block_angle = min_area_rect[2]
 
+            cv2.putText(image, "R:" + str(block_ratio) + " A: " + str(block_angle), font, font_size, self.colors[color][color_vals], font_thickness)
+            """            
+            rospy.loginfo("Contour angle: %f (rad) %f in (deg)",
+                          math.radians(contour_angle),
+                          math.degrees(contour_angle))
+            """
+        plt.imshow(image)
+        plt.show()
 
 pass
 # TODO: Move to utilities!
-
-
 def hsv_threshold_image(image, color, h_range, s_range, v_range):
     hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
@@ -261,6 +266,9 @@ class TopBlockDetector(BlockDetector):
         self.camera_height = 1.3
 
     def publish(self):
+        self.pub_rate = 1  # in Hz
+
+    def publish_debuggin(self):
         super().publish_debugging()
 
     def subscribe(self):
@@ -278,6 +286,10 @@ class HandBlockDetector(BlockDetector):
     def __init__(self):
         super().__init__()
         self.camera = "right_hand"
+
+    def publish(self):
+        self.pub_rate = 1  # in Hz
+        pass
 
     def publish_debugging(self):
         super().publish_debugging()
@@ -305,3 +317,16 @@ class HandBlockDetector(BlockDetector):
         self.blob_area_max_thresh = 100000  # TODO: Tune
 
         self.camera_height = ir_reading
+
+
+
+
+
+def main():
+    top_block_detector = TopBlockDetector()
+    rospy.init_node("top_block_detector")
+    top_block_detector.subscribe()
+    top_block_detector.publish()
+
+    while(not rospy.is_shutdown()):
+        top_block_detector.pub_rate.sleep()
