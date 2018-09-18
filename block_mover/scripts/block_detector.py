@@ -4,20 +4,27 @@ import numpy as np  # For matrix operations
 import cv2  # OpenCV
 import math  # For math operations
 
-from block_mover.msg import BlockObservationArray
+from block_mover.msg import BlockObservation, BlockObservationArray
 
 # ROS imports
 import rospy
 import tf
 from cv_bridge import CvBridge
+
+# ROS messages
 from sensor_msgs.msg import Image, CameraInfo, Range
-from visualization_msgs.msg import MarkerArray
+from visualization_msgs.msg import Marker, MarkerArray
+from geometry_msgs.msg import Point, Quaternion
+
 from image_geometry import PinholeCameraModel
 
 
 from matplotlib import pyplot as plt  # For plotting
 
 # TODO; Store all of these in a param file somewhere
+# To the right are values that are better tuned for good lighting
+# whereas the current values can still do well in bad lighting
+# (lights off)
 BLU_LOW_HUE = 98
 BLU_HIGH_HUE = 118
 BLU_LOW_SAT = 154
@@ -25,12 +32,12 @@ BLU_HIGH_SAT = 255
 BLU_LOW_VAL = 0
 BLU_HIGH_VAL = 255
 
-GRN_LOW_HUE = 30
-GRN_HIGH_HUE = 63
-GRN_LOW_SAT = 91
+GRN_LOW_HUE = 41  # 31
+GRN_HIGH_HUE = 70  # 77
+GRN_LOW_SAT = 94  # 89
 GRN_HIGH_SAT = 255
-GRN_LOW_VAL = 0
-GRN_HIGH_VAL = 255
+GRN_LOW_VAL = 13  # 71
+GRN_HIGH_VAL = 212
 
 TEAL_LOW_HUE = 90
 TEAL_HIGH_HUE = 104
@@ -40,12 +47,12 @@ TEAL_LOW_VAL = 42
 TEAL_HIGH_VAL = 25
 
 RED_LOW_HUE_1 = 0
-RED_HIGH_HUE_1 = 0
+RED_HIGH_HUE_1 = 11  # 0
 RED_LOW_HUE_2 = 161
 RED_HIGH_HUE_2 = 180
 RED_LOW_SAT = 96
 RED_HIGH_SAT = 255
-RED_LOW_VAL = 0
+RED_LOW_VAL = 47  # 47
 RED_HIGH_VAL = 255
 
 YEL_LOW_HUE = 4
@@ -90,25 +97,27 @@ colors = {
         "high_v": BLU_HIGH_VAL,
         "color_val": (255, 0, 0)
     },
-    "yellow": {
-        "low_h": YEL_LOW_HUE,
-        "high_h": YEL_HIGH_HUE,
-        "low_s": YEL_LOW_SAT,
-        "high_s": YEL_HIGH_SAT,
-        "low_v": YEL_LOW_VAL,
-        "high_v": YEL_HIGH_VAL,
-        "color_val": (0, 255, 255)
-    },
-    "teal": {
-        "low_h": TEAL_LOW_HUE,
-        "high_h": TEAL_HIGH_HUE,
-        "low_s": TEAL_LOW_SAT,
-        "high_s": TEAL_HIGH_SAT,
-        "low_v": TEAL_LOW_VAL,
-        "high_v": TEAL_HIGH_VAL,
-        "color_val": (255, 60, 0)
-    },
+    # "yellow": {
+    #    "low_h": YEL_LOW_HUE,
+    #    "high_h": YEL_HIGH_HUE,
+    #    "low_s": YEL_LOW_SAT,
+    #    "high_s": YEL_HIGH_SAT,
+    #    "low_v": YEL_LOW_VAL,
+    #    "high_v": YEL_HIGH_VAL,
+    #    "color_val": (0, 255, 255)
+    # },
+    # "teal": {
+    #    "low_h": TEAL_LOW_HUE,
+    #    "high_h": TEAL_HIGH_HUE,
+    #    "low_s": TEAL_LOW_SAT,
+    #    "high_s": TEAL_HIGH_SAT,
+    #    "low_v": TEAL_LOW_VAL,
+    #    "high_v": TEAL_HIGH_VAL,
+    #    "color_val": (255, 60, 0)
+    # },
 }
+
+TUNE_HSV_VALS = False
 
 
 class BlockDetector(object):
@@ -141,7 +150,7 @@ class BlockDetector(object):
 
         # For morphological opening and closing
         if (self.image_width <= 800):
-            self.morph_opening_kernel = (2, 2)
+            self.morph_opening_kernel = (1, 1)
             self.morph_closing_kernel = (2, 2)
         else:
             self.morph_opening_kernel = (7, 7)
@@ -221,6 +230,8 @@ class BlockDetector(object):
 
     def cam_callback(self, data):
         self.curr_image = self.cv_bridge.imgmsg_to_cv2(data, "bgr8")
+        if(TUNE_HSV_VALS):
+            self.find_hsv_values()
         self.detected_blocks = self.detect_blocks()
         self.bounded_image = self.draw_detected_blocks()
 
@@ -270,7 +281,8 @@ class BlockDetector(object):
             for contour in contours:
                 min_area_rect = cv2.minAreaRect(contour)
                 contour_area = min_area_rect[1][0] * min_area_rect[1][1]
-                contour_center = min_area_rect[0]
+                contour_center = (int(min_area_rect[0][0]),
+                                  int(min_area_rect[0][1]))
 
                 distance_to_center = distance(
                     contour_center, self.allowed_circle_center)
@@ -279,8 +291,32 @@ class BlockDetector(object):
                 if (contour_area > self.blob_area_min_thresh
                         and contour_area < self.blob_area_max_thresh and
                         distance_to_center < self.allowed_circle_diameter):
+                                # Write the ratio
 
-                    detected_blocks.append((color, min_area_rect))
+                    if (min_area_rect[1][0] > min_area_rect[1][1]):
+                        block_length_pix = round(min_area_rect[1][0], 0)
+                        block_width_pix = round(min_area_rect[1][1], 0)
+                    else:
+                        block_length_pix = round(min_area_rect[1][1], 0)
+                        block_width_pix = round(min_area_rect[1][0], 0)
+                    # Get the block length in block units (1x1, 1x4, etc)
+                    block_length, block_width = self.get_block_type(
+                        block_length_pix, block_width_pix)
+                    # Calculate the block angle
+                    # Adding 90 because the resultant angle from min_area_rect
+                    # is always [-90, 0] so we can shift it's range to
+                    # [0, 90] and then convert from degrees to radians
+                    block_angle = math.radians(min_area_rect[2] + 90.0)
+
+                    detected_blocks.append(
+                        {"color": color,
+                         "min_area_rect": min_area_rect,
+                         "block_center": contour_center,
+                         "block_length": block_length,
+                         "block_width": block_width,
+                         "block_angle": block_angle
+                         })
+
                 else:
                     """
                     rospy.loginfo(
@@ -293,39 +329,31 @@ class BlockDetector(object):
     def draw_detected_blocks(self):
         image = self.curr_image.copy()
         cv2.circle(image, self.allowed_circle_center,
-                   self.allowed_circle_diameter, (0, 0, 0), 1)
+                   self.allowed_circle_diameter + 110, (0, 0, 0), 220)
 
-        for color, min_area_rect in self.detected_blocks:
+        for detected_block in self.detected_blocks:
             # Draw bounding box in color
             if (self.opencv3):
-                bounding_box = np.int0(cv2.boxPoints(min_area_rect))
+                bounding_box = np.int0(cv2.boxPoints(
+                    detected_block["min_area_rect"]))
             else:
-                bounding_box = np.int0(cv2.cv.BoxPoints(min_area_rect))
+                bounding_box = np.int0(cv2.cv.BoxPoints(
+                    detected_block["min_area_rect"]))
 
             cv2.drawContours(image, [bounding_box], 0,
-                             colors[color]["color_val"], 2)
-
-            cx = int(min_area_rect[0][0])
-            cy = int(min_area_rect[0][1])
+                             colors[detected_block["color"]]["color_val"], 2)
 
             # Draw center of bounding box
-            cv2.circle(image, (cx, cy),
-                       3, colors[color]["color_val"], 1)
-
-            # Write the ratio
-            if (bounding_box[1][0] > bounding_box[1][1]):
-                block_ratio = bounding_box[1][0] / bounding_box[1][1]
-            else:
-                block_ratio = bounding_box[1][1] / bounding_box[1][0]
-
-            # Calculate the block angle
-            block_angle = min_area_rect[2]
+            cv2.circle(image, detected_block["block_center"],
+                       3, colors[detected_block["color"]]["color_val"], 1)
 
             cv2.putText(image,
-                        "R:" + str(round(block_ratio, 2)) +
-                        " A: " + str(round(block_angle, 2)),
-                        (cx, cy+10),
-                        self.font, self.font_size, colors[color]["color_val"],
+                        str(detected_block["block_width"]) + "x" +
+                        str(detected_block["block_length"]),
+                        # " A: " + str(round(block_angle, 2)),
+                        detected_block["block_center"],
+                        self.font, self.font_size, colors[detected_block["color"]
+                                                          ]["color_val"],
                         int(self.font_thickness))
 
             """
@@ -336,8 +364,101 @@ class BlockDetector(object):
 
         return image
 
+    def get_block_type(self, block_length, block_width):
+        if(block_length < self.one_unit_max):
+            length = 1
+        elif(block_length < self.two_unit_max):
+            length = 2
+        elif(block_length < self.three_unit_max):
+            length = 3
+        elif(block_length < self.four_unit_max):
+            length = 4
+        else:
+            length = None
+
+        if(block_width < self.one_unit_max):
+            width = 1
+        elif(block_width < self.two_unit_max):
+            width = 2
+        else:
+            width = None
+
+        return (length, width)
+
+    def find_hsv_values(self):
+        # optional argument for trackbars
+
+        # named ites for easy reference
+        barsWindow = 'Bars'
+        hl = 'H Low'
+        hh = 'H High'
+        sl = 'S Low'
+        sh = 'S High'
+        vl = 'V Low'
+        vh = 'V High'
+
+        # set up for video capture on camera 0
+
+        # create window for the slidebars
+        cv2.namedWindow(barsWindow, flags=cv2.WINDOW_AUTOSIZE)
+
+        # create the sliders
+        cv2.createTrackbar(hl, barsWindow, 0, 179, nothing)
+        cv2.createTrackbar(hh, barsWindow, 0, 179, nothing)
+        cv2.createTrackbar(sl, barsWindow, 0, 255, nothing)
+        cv2.createTrackbar(sh, barsWindow, 0, 255, nothing)
+        cv2.createTrackbar(vl, barsWindow, 0, 255, nothing)
+        cv2.createTrackbar(vh, barsWindow, 0, 255, nothing)
+
+        # set initial values for sliders
+        cv2.setTrackbarPos(hl, barsWindow, 0)
+        cv2.setTrackbarPos(hh, barsWindow, 179)
+        cv2.setTrackbarPos(sl, barsWindow, 0)
+        cv2.setTrackbarPos(sh, barsWindow, 255)
+        cv2.setTrackbarPos(vl, barsWindow, 0)
+        cv2.setTrackbarPos(vh, barsWindow, 255)
+
+        while(True):
+            frame = self.curr_image
+            frame = cv2.GaussianBlur(frame, (5, 5), 0)
+
+            # convert to HSV from BGR
+            hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+            # read trackbar positions for all
+            hul = cv2.getTrackbarPos(hl, barsWindow)
+            huh = cv2.getTrackbarPos(hh, barsWindow)
+            sal = cv2.getTrackbarPos(sl, barsWindow)
+            sah = cv2.getTrackbarPos(sh, barsWindow)
+            val = cv2.getTrackbarPos(vl, barsWindow)
+            vah = cv2.getTrackbarPos(vh, barsWindow)
+
+            # make array for final values
+            HSVLOW = np.array([hul, sal, val])
+            HSVHIGH = np.array([huh, sah, vah])
+
+            # apply the range on a mask
+            mask = cv2.inRange(hsv, HSVLOW, HSVHIGH)
+            maskedFrame = cv2.bitwise_and(frame, frame, mask=mask)
+
+            # display the camera and masked images
+            cv2.imshow('Masked', maskedFrame)
+            cv2.imshow('Camera', frame)
+
+            # check for q to quit program with 5ms delay
+            if cv2.waitKey(5) & 0xFF == ord('q'):
+                break
+
+        # clean up our resources
+        cv2.destroyAllWindows()
+
+
+def nothing(x):
+    pass
+
 
 # TODO: Move to utilities!
+
 
 def distance(p0, p1):
     return math.sqrt((p0[0] - p1[0])**2 + (p0[1] - p1[1])**2)
@@ -367,6 +488,55 @@ def hsv_threshold_image(image, color, h_range, s_range, v_range):
     return masked_image, hsv_mask
 
 
+def create_block_marker(frame, id, position, orientation, length, width, block_color, transparency):
+    curr_marker = Marker()
+    curr_marker.header.frame_id = frame
+
+    curr_marker.type = 1  # sphere
+    curr_marker.action = 0
+    curr_marker.id = id
+    curr_marker.frame_locked = True
+    curr_marker.pose.position = position
+    curr_marker.pose.orientation = orientation
+
+    single_unit_dim = 0.03
+
+    curr_marker.scale.x = single_unit_dim
+    curr_marker.scale.y = length*single_unit_dim
+    curr_marker.scale.z = single_unit_dim
+
+    if(block_color == "red"):
+        curr_marker.color.r = 1.0
+        curr_marker.color.g = 0.0
+        curr_marker.color.b = 0.0
+    elif(block_color == "blue"):
+        curr_marker.color.r = 0.0
+        curr_marker.color.g = 0.0
+        curr_marker.color.b = 1.0
+    elif(block_color == "green"):
+        curr_marker.color.r = 0.0
+        curr_marker.color.g = 1.0
+        curr_marker.color.b = 0.0
+    elif(block_color == "yellow"):
+        curr_marker.color.r = 1.0
+        curr_marker.color.g = 1.0
+        curr_marker.color.b = 0.0
+    elif(block_color == "teal"):
+        curr_marker.color.r = 0.0
+        curr_marker.color.g = 0.2
+        curr_marker.color.b = 1.0
+    else:
+        rospy.logerr(
+            "Color %s doesn't have a supported marker yet! you should add one.", block_color)
+
+    # Alpha value (transparency)
+    curr_marker.color.a = transparency
+
+    curr_marker.lifetime = rospy.Duration(0)
+
+    return curr_marker
+
+
 class TopBlockDetector(BlockDetector):
     def __init__(self):
         BlockDetector.__init__(self, resolution=(640, 480),
@@ -374,11 +544,9 @@ class TopBlockDetector(BlockDetector):
                                allowed_circle_diameter=201)
 
         self.camera = "top"
-        self.tf_listener = tf.TransformListener()
-        self.camera_model = None
 
         self.blob_area_min_thresh = 40
-        self.blob_area_max_thresh = 1000
+        self.blob_area_max_thresh = 1200
 
         # Constant
         self.camera_height = 1.3
@@ -388,9 +556,32 @@ class TopBlockDetector(BlockDetector):
         self.font_thickness = 1
 
         self.center_dist_thresh = 200
+        self.one_unit_max = 22
+        self.two_unit_max = 34
+        self.three_unit_max = 48
+        self.four_unit_max = 60
+
+        # Get TF from top camera to base
+        try:
+            self.tf_listener = tf.TransformListener()
+            time = rospy.Time(0)
+            self.tf_listener.waitForTransform(
+                "/camera_link", "/base", time, rospy.Duration(4.0))
+            (trans, rot) = self.tf_listener.lookupTransform(
+                "/camera_link", "/base", time)
+
+            self.top_to_base_mat = tf.transformations.compose_matrix(
+                translate=trans,
+                angles=tf.transformations.euler_from_quaternion(rot))
+
+        except (tf.LookupException, tf.ConnectivityException):
+            rospy.loginfo("No transform from base to camera available!")
+
+        self.enable_rviz_markers = True
 
     def create_debugging_publisher(self):
         BlockDetector.create_debugging_publisher(self)
+        block_marker_pub = rospy.Publisher()
 
     def create_block_obs_publisher(self):
         self.pub_rate = rospy.Rate(1)  # in Hz
@@ -400,10 +591,69 @@ class TopBlockDetector(BlockDetector):
     def subscribe(self):
         self.cam_sub = rospy.Subscriber("/camera/rgb/image_rect_color", Image,
                                         self.cam_callback)
-        """
         self.cam_info_sub = rospy.Subscriber(
-            "/ camera/rgb/camera_info", CameraInfo, self.cam_info_callback)
-        """
+            "/camera/rgb/camera_info", CameraInfo, self.cam_info_callback)
+
+    def cam_callback(self, data):
+        BlockDetector.cam_callback(self, data)
+
+        # generate_block_obs(self)
+
+        if(self.enable_rviz_markers):
+            self.generate_rviz_markers()
+
+    def cam_info_callback(self, data):
+        self.camera_model = PinholeCameraModel()
+        self.camera_model.fromCameraInfo(data)
+
+        # Unsubscribe after receiving CameraInfo first time
+        self.cam_info_sub.unregister()
+
+    def generate_block_obs(self):
+        block_marker_list = []
+        block_obs_list = []
+
+        for detected_block in self.detected_blocks:
+            block_center = detected_block["block_center"]
+            block_angle = detected_block["block_angle"]
+
+            # TODO: Need to flip some axes here!
+
+            # Project pixel coordinates of detected block to a ray from
+            # camera link
+            block_ray = self.camera_model.project3dToPixel(block_center)
+
+            # Scale the ray by the distance from the camera to the table
+            # to find it's intersection with the table plane, and then
+            # make homogeneous and flatten array
+            homog_ray = np.concatenate(
+                self.table_dist * block_ray, np.ones(1)).reshape(4, 1)
+
+            block_xyz = np.dot(self.top_to_base_mat, homog_ray)
+
+            block_point = Point(
+                x=block_xyz[0], y=block_xyz[1], z=self.table_to_base_dist)
+
+            block_orientation_arr = tf.transformations.quaternion_from_euler(
+                0, 0, block_angle)
+
+            block_orientation = Quaternion()
+            block_orientation.x = block_orientation_arr[0]
+            block_orientation.y = block_orientation_arr[1]
+            block_orientation.z = block_orientation_arr[2]
+            block_orientation.w = block_orientation_arr[3]
+
+            if(self.enable_rviz_markers):
+                curr_marker = \
+                    create_block_marker(frame="base",
+                                        id=len(
+                                            block_marker_list.markers),
+                                        position=block_position_p,
+                                        orientation=block_orientation,
+                                        length=block_length, width=block_width, block_color=color, transparency=self.transparency)
+
+    def generate_rviz_markers(self):
+        pass
 
 
 class HandBlockDetector(BlockDetector):
@@ -413,6 +663,8 @@ class HandBlockDetector(BlockDetector):
 
         self.font_size = 3.0
         self.font_thickness = 2
+
+        self.enable_rviz_markers = False
 
     def create_publisher(self):
         self.pub_rate = rospy.Rate(1)  # in Hz
@@ -424,9 +676,6 @@ class HandBlockDetector(BlockDetector):
     def subscribe(self):
         self.cam_sub = rospy.Subscriber("/cameras/right_hand_camera/image",
                                         Image, self.cam_callback)
-        self.cam_info_sub = rospy.Subscriber(
-            "/cameras/right_hand_camera/camera_info_std", CameraInfo,
-            self.cam_info_callback)
         self.ir_sub = rospy.Subscriber("/robot/range/right_hand_range/state",
                                        Range, self.ir_callback)
 
@@ -442,17 +691,13 @@ class HandBlockDetector(BlockDetector):
 
         self.camera_height = ir_reading
 
-    def cam_info_callback(self, data):
-        self.camera_model = PinholeCameraModel()
-        self.camera_model.fromCameraInfo(data)
-        # Unsubscribe after receiving CameraInfo first time
-        self.cam_info_sub.unregister()
-
 
 # Testing for TopBlockDetector
 def main():
-    top_block_detector = TopBlockDetector()
     rospy.init_node("top_block_detector")
+
+    top_block_detector = TopBlockDetector()
+
     top_block_detector.subscribe()
     top_block_detector.create_block_obs_publisher()
     top_block_detector.create_debugging_publisher()
