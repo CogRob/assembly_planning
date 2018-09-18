@@ -1,7 +1,8 @@
 #!/usr/bin/env python
-import numpy as np
+import numpy as np  # For matrix operations
 
-import cv2
+import cv2  # OpenCV
+import math  # For math operations
 
 from block_mover.msg import BlockObservationArray
 
@@ -11,6 +12,10 @@ import tf
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image, CameraInfo, Range
 from visualization_msgs.msg import MarkerArray
+from image_geometry import PinholeCameraModel
+
+
+from matplotlib import pyplot as plt  # For plotting
 
 # TODO; Store all of these in a param file somewhere
 BLU_LOW_HUE = 98
@@ -107,9 +112,15 @@ colors = {
 
 
 class BlockDetector(object):
-    def __init__(self, resolution):
+    def __init__(self, resolution, allowed_circle_center,
+                 allowed_circle_diameter):
         self.image_width = resolution[0]
         self.image_height = resolution[1]
+
+        self.image_center = (int(self.image_width/2), int(self.image_height/2))
+
+        self.allowed_circle_center = allowed_circle_center
+        self.allowed_circle_diameter = allowed_circle_diameter
 
         self.curr_image = np.zeros((self.image_height, self.image_width, 3))
 
@@ -129,9 +140,9 @@ class BlockDetector(object):
         self.blob_area_max_thresh = None
 
         # For morphological opening and closing
-        if (self.image_width <= 600):
-            self.morph_opening_kernel = (5, 5)
-            self.morph_closing_kernel = (10, 10)
+        if (self.image_width <= 800):
+            self.morph_opening_kernel = (2, 2)
+            self.morph_closing_kernel = (2, 2)
         else:
             self.morph_opening_kernel = (7, 7)
             self.morph_closing_kernel = (13, 13)
@@ -159,32 +170,30 @@ class BlockDetector(object):
 
         self.store_segmented_images = False
 
-    def publish(self):
-        # Should be implemented in child class
-        pass
+        self.font = cv2.FONT_HERSHEY_SIMPLEX
 
-    def publish_debugging(self):
+    def create_debugging_publisher(self):
         # The HSV segmented images
-        self.red_seg_img_pub = rospy.Publisher(
+        self.red_seg_image_pub = rospy.Publisher(
             "block_finder/" + self.camera + "/red_segmented_image",
             Image,
             queue_size=1)
-        self.yellow_seg_img_pub = rospy.Publisher(
+        self.yellow_seg_image_pub = rospy.Publisher(
             "block_finder/" + self.camera + "/yellow_segmented_image",
             Image,
             queue_size=1)
-        self.blue_seg_img_pub = rospy.Publisher(
+        self.blue_seg_image_pub = rospy.Publisher(
             "block_finder/" + self.camera + "/blue_segmented_image",
             Image,
             queue_size=1)
-        self.green_seg_img_pub = rospy.Publisher(
+        self.green_seg_image_pub = rospy.Publisher(
             "block_finder/" + self.camera + "/green_segmented_image",
             Image,
             queue_size=1)
 
         # The image with bounded boxes around detected blocks
-        self.rect_seg_img_pub = rospy.Publisher(
-            "block_finder/" + self.camera + "/rect_segmented_image",
+        self.bounded_image_pub = rospy.Publisher(
+            "block_finder/" + self.camera + "/bounded_image",
             Image,
             queue_size=1)
 
@@ -200,25 +209,31 @@ class BlockDetector(object):
             MarkerArray,
             queue_size=1)
 
-    def cam_callback(self, data):
-        self.curr_image = self.cv_bridge.imgmsg_to_cv2(data)
-        self.detect_blocks()
+    def publish_debugging(self):
+        self.red_seg_image_pub.publish(self.cv_bridge.cv2_to_imgmsg(
+            self.hsv_thresh_images["red"]))
+        self.green_seg_image_pub.publish(self.cv_bridge.cv2_to_imgmsg(
+            self.hsv_thresh_images["green"]))
+        self.blue_seg_image_pub.publish(self.cv_bridge.cv2_to_imgmsg(
+            self.hsv_thresh_images["blue"]))
+        self.bounded_image_pub.publish(self.cv_bridge.cv2_to_imgmsg(
+            self.bounded_image))
 
-        rospy.loginfo()
+    def cam_callback(self, data):
+        self.curr_image = self.cv_bridge.imgmsg_to_cv2(data, "bgr8")
+        self.detected_blocks = self.detect_blocks()
+        self.bounded_image = self.draw_detected_blocks()
 
     def detect_blocks(self):
         detected_blocks = []
         for color in colors:
             # Threshold based on HSV
-            masked_image = hsv_threshold_image(
+            masked_image, hsv_mask = hsv_threshold_image(
                 self.curr_image,
                 color,
                 h_range=(colors[color]["low_h"], colors[color]["high_h"]),
                 s_range=(colors[color]["low_s"], colors[color]["high_s"]),
                 v_range=(colors[color]["low_v"], colors[color]["high_v"]))
-
-            if (self.store_segmented_images):
-                self.hsv_thresh_images[color] = masked_image.copy()
 
             # Morphological opening (remove small objects from the foreground)
             erode_1 = cv2.erode(
@@ -240,7 +255,10 @@ class BlockDetector(object):
                 np.ones(self.morph_closing_kernel, np.uint8),
                 iterations=1)
 
-            ret, thresh = cv2.threshold(erode_2, 157, 255, 0)
+            if (self.store_segmented_images):
+                self.hsv_thresh_images[color] = erode_2.copy()
+
+            ret, thresh = cv2.threshold(erode_2, 100, 255, 0)
 
             if (self.opencv3):
                 im2, contours, hierarchy = cv2.findContours(
@@ -252,85 +270,108 @@ class BlockDetector(object):
             for contour in contours:
                 min_area_rect = cv2.minAreaRect(contour)
                 contour_area = min_area_rect[1][0] * min_area_rect[1][1]
+                contour_center = min_area_rect[0]
+
+                distance_to_center = distance(
+                    contour_center, self.allowed_circle_center)
 
                 # Check that contour area is within thresholds
                 if (contour_area > self.blob_area_min_thresh
-                        and contour_area < self.blob_area_max_thresh):
+                        and contour_area < self.blob_area_max_thresh and
+                        distance_to_center < self.allowed_circle_diameter):
 
                     detected_blocks.append((color, min_area_rect))
                 else:
+                    """
                     rospy.loginfo(
                         "Contour area was too small, probably not a block.")
+                    """
+                    pass
 
         return detected_blocks
 
-    def draw_detected_blocks(self, image, detected_blocks):
-        for color, min_area_rect in detected_blocks:
+    def draw_detected_blocks(self):
+        image = self.curr_image.copy()
+        cv2.circle(image, self.allowed_circle_center,
+                   self.allowed_circle_diameter, (0, 0, 0), 1)
+
+        for color, min_area_rect in self.detected_blocks:
             # Draw bounding box in color
             if (self.opencv3):
                 bounding_box = np.int0(cv2.boxPoints(min_area_rect))
             else:
                 bounding_box = np.int0(cv2.cv.BoxPoints(min_area_rect))
 
-            cv2.drawContours(img, [bounding_box], 0,
-                             self.colors[color][color_val], 2)
+            cv2.drawContours(image, [bounding_box], 0,
+                             colors[color]["color_val"], 2)
+
+            cx = int(min_area_rect[0][0])
+            cy = int(min_area_rect[0][1])
 
             # Draw center of bounding box
-            cv2.circle(img, min_area_rect[0], 3, self.colors[color][color_val],
-                       1)
+            cv2.circle(image, (cx, cy),
+                       3, colors[color]["color_val"], 1)
 
             # Write the ratio
-            if (box[1][0] > block[1][1]):
-                block_ratio = block[1][0] / block[1][1]
+            if (bounding_box[1][0] > bounding_box[1][1]):
+                block_ratio = bounding_box[1][0] / bounding_box[1][1]
             else:
-                block_ratio = block[1][1] / block[1][0]
+                block_ratio = bounding_box[1][1] / bounding_box[1][0]
 
             # Calculate the block angle
             block_angle = min_area_rect[2]
 
             cv2.putText(image,
-                        "R:" + str(block_ratio) + " A: " + str(block_angle),
-                        font, font_size, self.colors[color][color_vals],
-                        font_thickness)
-            """            
+                        "R:" + str(round(block_ratio, 2)) +
+                        " A: " + str(round(block_angle, 2)),
+                        (cx, cy+10),
+                        self.font, self.font_size, colors[color]["color_val"],
+                        int(self.font_thickness))
+
+            """
             rospy.loginfo("Contour angle: %f (rad) %f in (deg)",
                           math.radians(contour_angle),
                           math.degrees(contour_angle))
             """
-        plt.imshow(image)
-        plt.show()
 
-
-pass
+        return image
 
 
 # TODO: Move to utilities!
+
+def distance(p0, p1):
+    return math.sqrt((p0[0] - p1[0])**2 + (p0[1] - p1[1])**2)
+
+
 def hsv_threshold_image(image, color, h_range, s_range, v_range):
     hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
     if (color != "red"):
         hsv_mask = cv2.inRange(hsv_image,
-                               np.array(n[h_range[0], s_range[0], v_range[0]]),
+                               np.array([h_range[0], s_range[0], v_range[0]]),
                                np.array([h_range[1], s_range[1], v_range[1]]))
 
     else:
         # There are 2 H ranges for red
         hsv_mask_lower = cv2.inRange(
-            hsv_image, np.array([h_range[0][0], s_range[0][0], v_range[0][0]]),
-            np.array([h_range[1][0], s_range[1][0], v_range[1][0]]))
+            hsv_image, np.array([h_range[0][0], s_range[0], v_range[0]]),
+            np.array([h_range[1][0], s_range[1], v_range[1]]))
 
         hsv_mask_higher = cv2.inRange(
-            hsv_image, np.array([h_range[0][0], s_range[0][0], v_range[0][0]]),
-            np.array([h_range[1][0], s_range[1][0], v_range[1][0]]))
+            hsv_image, np.array([h_range[0][1], s_range[0], v_range[0]]),
+            np.array([h_range[1][1], s_range[1], v_range[1]]))
         hsv_mask = hsv_mask_lower | hsv_mask_higher
 
     masked_image = cv2.bitwise_and(image, image, mask=hsv_mask)
-    return masked_image
+
+    return masked_image, hsv_mask
 
 
 class TopBlockDetector(BlockDetector):
     def __init__(self):
-        BlockDetector.__init__(self, resolution=(1280, 800))
+        BlockDetector.__init__(self, resolution=(640, 480),
+                               allowed_circle_center=(322, 250),
+                               allowed_circle_diameter=201)
 
         self.camera = "top"
         self.tf_listener = tf.TransformListener()
@@ -341,18 +382,23 @@ class TopBlockDetector(BlockDetector):
 
         # Constant
         self.camera_height = 1.3
-        self.store_segmented_images = False
+        self.store_segmented_images = True
 
-    def publish(self):
+        self.font_size = 0.5
+        self.font_thickness = 1
+
+        self.center_dist_thresh = 200
+
+    def create_debugging_publisher(self):
+        BlockDetector.create_debugging_publisher(self)
+
+    def create_block_obs_publisher(self):
         self.pub_rate = rospy.Rate(1)  # in Hz
         self.block_obs_pub = rospy.Publisher(
             "block_finder/top/block_obs", BlockObservationArray, queue_size=1)
 
-    def publish_debuggin(self):
-        BlockDetector.publish_debugging(self)
-
     def subscribe(self):
-        self.cam_sub = rospy.Subscriber("/cameras/rgb/image_rect_color", Image,
+        self.cam_sub = rospy.Subscriber("/camera/rgb/image_rect_color", Image,
                                         self.cam_callback)
         """
         self.cam_info_sub = rospy.Subscriber(
@@ -362,15 +408,18 @@ class TopBlockDetector(BlockDetector):
 
 class HandBlockDetector(BlockDetector):
     def __init__(self):
-        super().__init__()
+        BlockDetector.__init__(self, resolution=(1280, 800))
         self.camera = "right_hand"
 
-    def publish(self):
+        self.font_size = 3.0
+        self.font_thickness = 2
+
+    def create_publisher(self):
         self.pub_rate = rospy.Rate(1)  # in Hz
         pass
 
-    def publish_debugging(self):
-        BlockDetector.publish_debugging(self)
+    def create_debugging_publisher(self):
+        BlockDetector.create_debugging_publisher(self)
 
     def subscribe(self):
         self.cam_sub = rospy.Subscriber("/cameras/right_hand_camera/image",
@@ -405,10 +454,12 @@ def main():
     top_block_detector = TopBlockDetector()
     rospy.init_node("top_block_detector")
     top_block_detector.subscribe()
-    top_block_detector.publish()
+    top_block_detector.create_block_obs_publisher()
+    top_block_detector.create_debugging_publisher()
 
     while (not rospy.is_shutdown()):
         top_block_detector.pub_rate.sleep()
+        top_block_detector.publish_debugging()
 
 
 if __name__ == "__main__":
