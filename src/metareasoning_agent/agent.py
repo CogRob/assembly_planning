@@ -232,20 +232,23 @@ class Agent(object):
             # TODO: We shouldn't have to go through the list of blocks everytime, store in a dictionary in future
             # Find the location of the block to move towards
 
-            for block_loc in self.inv_state:
-                rospy.loginfo("Checking block: %dx%d %s", block_loc.width,
-                              block_loc.length, block_loc.color)
-                # Requested block should have same color, width and length
-                if (block_loc.color == block.color
-                        and block_loc.width == block.width
-                        and block_loc.length == block.length):
-                    print("Location to go to is %f %f", block_loc.pose.x,
-                          block_loc.pose.y)
-                    overhead_pose.position = Point(
-                        x=block_loc.pose.x,
-                        y=block_loc.pose.y,
-                        z=self._hover_distance)
-                    overhead_pose.orientation = self._overhead_orientation
+            while(overhead_pose == Pose()):
+                for block_loc in self.inv_state:
+                    rospy.loginfo("Checking block: %dx%d %s", block_loc.width,
+                                  block_loc.length, block_loc.color)
+                    # Requested block should have same color, width and length
+                    if (block_loc.color == block.color
+                            and block_loc.width == block.width
+                            and block_loc.length == block.length):
+                        print("Location to go to is %f %f", block_loc.pose.x,
+                              block_loc.pose.y)
+                        overhead_pose.position = Point(
+                            x=block_loc.pose.x,
+                            y=block_loc.pose.y,
+                            z=self._hover_distance)
+                        overhead_pose.orientation = self._overhead_orientation
+
+                self._detect()
 
         elif (position is not None and block is None):
 
@@ -334,10 +337,13 @@ class Agent(object):
             # lower_pixel_center_x = 650
             # lower_pixel_center_y = 294
 
+            lower_pixel_center_x = 655
+            lower_pixel_center_y = 295
+
             # At -0.16 meters the location of center pixel that will result in optimal grasp
             # Possible new values:
-            lower_pixel_center_x = 660
-            lower_pixel_center_y = 285
+            # lower_pixel_center_x = 660
+            # lower_pixel_center_y = 285
             # lower_pixel_center_x = 330
             # lower_pixel_center_y = 94
 
@@ -456,10 +462,6 @@ class Agent(object):
 
                 block_pixel_locs = self._get_updated_pixel_locs()
 
-    # TODO: For testing purposes to give tester access to private _align(), delete later!
-    def extern_align(self, block_color, block_length, block_width, axis):
-        return self._align(block_color, block_length, block_width, axis)
-
     def _retract(self):
         self._ascend()
 
@@ -475,7 +477,7 @@ class Agent(object):
         # open the gripper
         self._gripper_open()
 
-    def _detect(self):
+    def _detect(self):  # , orientation):
         rospy.loginfo(
             "Updating block locations. Waiting for BlockObservationArray...")
 
