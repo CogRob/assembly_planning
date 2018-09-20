@@ -126,7 +126,7 @@ class Agent(object):
 
     def subscribe(self):
         hand_cam_pix_sub = rospy.Subscriber(
-            "/block_finder/right_hand/block_pixel_locs", BlockPixelLocArray,
+            "/block_detector/hand/block_pixel_locs", BlockPixelLocArray,
             self.hand_cam_pixel_locs_callback)
 
     def hand_cam_pixel_locs_callback(self, data):
@@ -138,7 +138,7 @@ class Agent(object):
 
         # Update the block pixel locations
         block_pixel_locs = rospy.wait_for_message(
-            "/block_finder/right_hand/block_pixel_locs",
+            "/block_detector/hand/block_pixel_locs",
             BlockPixelLocArray).pixel_locs
 
         rospy.loginfo("Block pixel locations updated.")
@@ -481,7 +481,7 @@ class Agent(object):
         rospy.loginfo(
             "Updating block locations. Waiting for BlockObservationArray...")
 
-        block_obs_msg = rospy.wait_for_message("/block_finder/top/block_obs",
+        block_obs_msg = rospy.wait_for_message("/block_detector/top/block_obs",
                                                BlockObservationArray)
 
         rospy.loginfo("Received %d inventory block observations",
