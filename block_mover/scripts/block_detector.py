@@ -14,7 +14,9 @@ from cv_bridge import CvBridge
 # ROS messages
 from sensor_msgs.msg import Image, CameraInfo, Range
 from visualization_msgs.msg import Marker, MarkerArray
-from geometry_msgs.msg import Point, Quaternion
+from geometry_msgs.msg import Point, Quaternion, PointStamped
+import tf2_ros
+import tf2_geometry_msgs
 
 from image_geometry import PinholeCameraModel
 
@@ -137,7 +139,7 @@ class BlockDetector(object):
         self.cv_bridge = CvBridge()
 
         # For debugging
-        self.markers = MarkerArray()
+        self.block_markers = MarkerArray()
         self.ray_markers = MarkerArray()
 
         # The name of the camera
@@ -184,37 +186,37 @@ class BlockDetector(object):
     def create_debugging_publisher(self):
         # The HSV segmented images
         self.red_seg_image_pub = rospy.Publisher(
-            "block_finder/" + self.camera + "/red_segmented_image",
+            "block_detector/" + self.camera + "/red_segmented_image",
             Image,
             queue_size=1)
         self.yellow_seg_image_pub = rospy.Publisher(
-            "block_finder/" + self.camera + "/yellow_segmented_image",
+            "block_detector/" + self.camera + "/yellow_segmented_image",
             Image,
             queue_size=1)
         self.blue_seg_image_pub = rospy.Publisher(
-            "block_finder/" + self.camera + "/blue_segmented_image",
+            "block_detector/" + self.camera + "/blue_segmented_image",
             Image,
             queue_size=1)
         self.green_seg_image_pub = rospy.Publisher(
-            "block_finder/" + self.camera + "/green_segmented_image",
+            "block_detector/" + self.camera + "/green_segmented_image",
             Image,
             queue_size=1)
 
         # The image with bounded boxes around detected blocks
         self.bounded_image_pub = rospy.Publisher(
-            "block_finder/" + self.camera + "/bounded_image",
+            "block_detector/" + self.camera + "/bounded_image",
             Image,
             queue_size=1)
 
         # RVIZ markers for debugging
         self.marker_pub = rospy.Publisher(
-            "block_finder/" + self.camera + "/block_markers",
+            "block_detector/" + self.camera + "/block_markers",
             MarkerArray,
             queue_size=1)
 
         # Rays from the camera to detected blocks for debugging
         self.ray_marker_pub = rospy.Publisher(
-            "block_finder/" + self.camera + "/image_rays",
+            "block_detector/" + self.camera + "/image_rays",
             MarkerArray,
             queue_size=1)
 
@@ -227,6 +229,9 @@ class BlockDetector(object):
             self.hsv_thresh_images["blue"]))
         self.bounded_image_pub.publish(self.cv_bridge.cv2_to_imgmsg(
             self.bounded_image))
+
+    def publish_markers(self):
+        self.marker_pub.publish(self.block_markers)
 
     def cam_callback(self, data):
         self.curr_image = self.cv_bridge.imgmsg_to_cv2(data, "bgr8")
@@ -306,7 +311,10 @@ class BlockDetector(object):
                     # Adding 90 because the resultant angle from min_area_rect
                     # is always [-90, 0] so we can shift it's range to
                     # [0, 90] and then convert from degrees to radians
-                    block_angle = math.radians(min_area_rect[2] + 90.0)
+                    if(min_area_rect[1][0] < min_area_rect[1][1]):
+                        block_angle = math.radians(min_area_rect[2] + 180)
+                    else:
+                        block_angle = math.radians(min_area_rect[2] + 90)
 
                     detected_blocks.append(
                         {"color": color,
@@ -349,8 +357,10 @@ class BlockDetector(object):
 
             cv2.putText(image,
                         str(detected_block["block_width"]) + "x" +
-                        str(detected_block["block_length"]),
-                        # " A: " + str(round(block_angle, 2)),
+                        str(detected_block["block_length"]) +
+                        " A: " +
+                        str(math.degrees(
+                            round(detected_block["block_angle"], 2))),
                         detected_block["block_center"],
                         self.font, self.font_size, colors[detected_block["color"]
                                                           ]["color_val"],
@@ -374,14 +384,14 @@ class BlockDetector(object):
         elif(block_length < self.four_unit_max):
             length = 4
         else:
-            length = None
+            length = 0
 
         if(block_width < self.one_unit_max):
             width = 1
         elif(block_width < self.two_unit_max):
             width = 2
         else:
-            width = None
+            width = 0
 
         return (length, width)
 
@@ -501,9 +511,9 @@ def create_block_marker(frame, id, position, orientation, length, width, block_c
 
     single_unit_dim = 0.03
 
-    curr_marker.scale.x = single_unit_dim
+    curr_marker.scale.x = width*single_unit_dim
     curr_marker.scale.y = length*single_unit_dim
-    curr_marker.scale.z = single_unit_dim
+    curr_marker.scale.z = 1.2 * single_unit_dim
 
     if(block_color == "red"):
         curr_marker.color.r = 1.0
@@ -536,11 +546,26 @@ def create_block_marker(frame, id, position, orientation, length, width, block_c
 
     return curr_marker
 
+# From https://rosettacode.org/wiki/Find_the_intersection_of_a_line_with_a_plane
+
+
+def line_plane_intersection(plane_normal, plane_point, ray_direction,
+                            ray_point, epsilon=1e-6):
+    n_dot_u = plane_normal.dot(ray_direction)
+    if(math.fabs(n_dot_u) < epsilon):
+        return None
+
+    w = ray_point - plane_point
+    si = -plane_normal.dot(w) / n_dot_u
+    psi = w + si * ray_direction + plane_point
+
+    return psi
+
 
 class TopBlockDetector(BlockDetector):
     def __init__(self):
         BlockDetector.__init__(self, resolution=(640, 480),
-                               allowed_circle_center=(322, 250),
+                               allowed_circle_center=(315, 255),
                                allowed_circle_diameter=201)
 
         self.camera = "top"
@@ -549,7 +574,12 @@ class TopBlockDetector(BlockDetector):
         self.blob_area_max_thresh = 1200
 
         # Constant
-        self.camera_height = 1.3
+        self.table_dist = 1.33
+
+        # Camera reference frame origin
+        self.ray_point = np.array([0, 0, 0])
+
+        self.table_to_base_dist = -0.1
         self.store_segmented_images = True
 
         self.font_size = 0.5
@@ -565,28 +595,61 @@ class TopBlockDetector(BlockDetector):
         try:
             self.tf_listener = tf.TransformListener()
             time = rospy.Time(0)
-            self.tf_listener.waitForTransform(
-                "/camera_link", "/base", time, rospy.Duration(4.0))
-            (trans, rot) = self.tf_listener.lookupTransform(
-                "/camera_link", "/base", time)
 
-            self.top_to_base_mat = tf.transformations.compose_matrix(
-                translate=trans,
-                angles=tf.transformations.euler_from_quaternion(rot))
+            self.tf_listener.waitForTransform(
+                "/base", "/camera_rgb_optical_frame", time, rospy.Duration(4))
+
+            (self.trans, self.rot) = self.tf_listener.lookupTransform(
+                "/base", "/camera_rgb_optical_frame", time)
 
         except (tf.LookupException, tf.ConnectivityException):
             rospy.loginfo("No transform from base to camera available!")
+
+        # From base reference frame table normal and point on table
+        table_plane_normal_base = PointStamped()
+        table_plane_normal_base.header.frame_id = "base"
+
+        table_plane_normal_base.header.stamp = rospy.Time(0)
+        table_plane_normal_base.point.x = 0
+        table_plane_normal_base.point.y = 0
+        table_plane_normal_base.point.z = -1000.
+
+        table_plane_point_base = PointStamped()
+        table_plane_point_base.header.frame_id = "base"
+        table_plane_point_base.header.stamp = rospy.Time(0)
+        table_plane_point_base.point.x = 0
+        table_plane_point_base.point.y = 0
+        table_plane_point_base.point.z = self.table_to_base_dist
+
+        # Covert to camera reference frame
+        table_plane_normal_cam_p = self.tf_listener.transformPoint(
+            "camera_rgb_optical_frame", table_plane_normal_base)
+
+        table_plane_point_cam_p = self.tf_listener.transformPoint(
+            "camera_rgb_optical_frame", table_plane_point_base)
+
+        # Convert to arrays
+        self.table_plane_normal_cam = \
+            np.array([table_plane_normal_cam_p.point.x,
+                      table_plane_normal_cam_p.point.y,
+                      table_plane_normal_cam_p.point.z
+                      ])
+
+        self.table_plane_point_cam = \
+            np.array([table_plane_point_cam_p.point.x,
+                      table_plane_point_cam_p.point.y,
+                      table_plane_point_cam_p.point.z
+                      ])
 
         self.enable_rviz_markers = True
 
     def create_debugging_publisher(self):
         BlockDetector.create_debugging_publisher(self)
-        block_marker_pub = rospy.Publisher()
 
     def create_block_obs_publisher(self):
         self.pub_rate = rospy.Rate(1)  # in Hz
         self.block_obs_pub = rospy.Publisher(
-            "block_finder/top/block_obs", BlockObservationArray, queue_size=1)
+            "block_detector/top/block_obs", BlockObservationArray, queue_size=1)
 
     def subscribe(self):
         self.cam_sub = rospy.Subscriber("/camera/rgb/image_rect_color", Image,
@@ -597,10 +660,7 @@ class TopBlockDetector(BlockDetector):
     def cam_callback(self, data):
         BlockDetector.cam_callback(self, data)
 
-        # generate_block_obs(self)
-
-        if(self.enable_rviz_markers):
-            self.generate_rviz_markers()
+        self.generate_block_obs()
 
     def cam_info_callback(self, data):
         self.camera_model = PinholeCameraModel()
@@ -610,50 +670,87 @@ class TopBlockDetector(BlockDetector):
         self.cam_info_sub.unregister()
 
     def generate_block_obs(self):
-        block_marker_list = []
         block_obs_list = []
+        # Reset block markers list
+        self.block_markers.markers = []
 
         for detected_block in self.detected_blocks:
             block_center = detected_block["block_center"]
             block_angle = detected_block["block_angle"]
-
-            # TODO: Need to flip some axes here!
+            block_length = detected_block["block_length"]
+            block_width = detected_block["block_width"]
+            block_color = detected_block["color"]
 
             # Project pixel coordinates of detected block to a ray from
-            # camera link
-            block_ray = self.camera_model.project3dToPixel(block_center)
+            # camera link (in camera's reference frame)
+            block_ray_vector = np.array(
+                self.camera_model.projectPixelTo3dRay(block_center))
+
+            block_position_cam_arr = line_plane_intersection(
+                self.table_plane_normal_cam, self.table_plane_point_cam,
+                block_ray_vector, self.ray_point)
+
+            block_position_cam = PointStamped()
+            block_position_cam.header.frame_id = "camera_rgb_optical_frame"
+            block_position_cam.header.stamp = rospy.Time(0)
+            block_position_cam.point.x = block_position_cam_arr[0]
+            block_position_cam.point.y = block_position_cam_arr[1]
+            block_position_cam.point.z = block_position_cam_arr[2]
+
+            block_position_base = self.tf_listener.transformPoint(
+                "base", block_position_cam)
+
+            #block_position_base.point.z = self.table_to_base_dist
+
+            # TODO: Check if block_angle is pitch, yaw or roll
+            block_orientation_cam = tf.transformations.quaternion_from_euler(
+                0, 0, block_angle)
+
+            # TODO: Check order of quaternion multiplication
+            block_orientation_base = tf.transformations.quaternion_multiply(
+                # block_orientation_cam, self.rot)
+                self.rot, block_orientation_cam)
+
+            """
+            block_ray = block_ray_orig.copy()
+            block_ray[0] = block_ray_orig[2]
+            block_ray[1] = -block_ray_orig[0]
+            block_ray[2] = -block_ray_orig[1]
 
             # Scale the ray by the distance from the camera to the table
             # to find it's intersection with the table plane, and then
-            # make homogeneous and flatten array
-            homog_ray = np.concatenate(
-                self.table_dist * block_ray, np.ones(1)).reshape(4, 1)
+            block_ray *= self.table_dist
+
+            # Make homogeneous and flatten array
+            homog_ray = np.concatenate((block_ray, np.ones(1))).reshape((4, 1))
 
             block_xyz = np.dot(self.top_to_base_mat, homog_ray)
 
-            block_point = Point(
+            block_position = Point(
                 x=block_xyz[0], y=block_xyz[1], z=self.table_to_base_dist)
-
             block_orientation_arr = tf.transformations.quaternion_from_euler(
                 0, 0, block_angle)
+            """
 
-            block_orientation = Quaternion()
-            block_orientation.x = block_orientation_arr[0]
-            block_orientation.y = block_orientation_arr[1]
-            block_orientation.z = block_orientation_arr[2]
-            block_orientation.w = block_orientation_arr[3]
+            block_orientation_base = Quaternion(*block_orientation_base)
+            """
+            block_orientation.x = block_orientation_base[0]
+            block_orientation.y = block_orientation_base[1]
+            block_orientation.z = block_orientation_base[2]
+            block_orientation.w = block_orientation_base[3]
+            """
 
             if(self.enable_rviz_markers):
-                curr_marker = \
+                self.block_markers.markers.append(
                     create_block_marker(frame="base",
                                         id=len(
-                                            block_marker_list.markers),
-                                        position=block_position_p,
-                                        orientation=block_orientation,
-                                        length=block_length, width=block_width, block_color=color, transparency=self.transparency)
-
-    def generate_rviz_markers(self):
-        pass
+                                            self.block_markers.markers),
+                                        position=block_position_base.point,
+                                        orientation=block_orientation_base,
+                                        length=block_length, width=block_width,
+                                        block_color=block_color,
+                                        transparency=1)
+                )
 
 
 class HandBlockDetector(BlockDetector):
@@ -705,6 +802,7 @@ def main():
     while (not rospy.is_shutdown()):
         top_block_detector.pub_rate.sleep()
         top_block_detector.publish_debugging()
+        top_block_detector.publish_markers()
 
 
 if __name__ == "__main__":
