@@ -1,28 +1,54 @@
 #!/usr/bin/env python
 
-from block_detector import BlockDetector, line_plane_intersection, create_block_marker
+from block_detector import BlockDetector, line_plane_intersection, \
+    create_block_marker
 
 import numpy as np
 
-from block_mover.msg import BlockObservation, BlockObservationArray, \
-    BlockPixelLoc, BlockPixelLocArray
+from block_mover.msg import BlockObservation, BlockObservationArray
 
 # ROS imports
 import rospy
 import tf
-from cv_bridge import CvBridge
 
 # ROS messages
-from sensor_msgs.msg import Image, CameraInfo, Range
-from visualization_msgs.msg import Marker, MarkerArray
-from geometry_msgs.msg import Point, Quaternion, PointStamped, Pose2D
-import tf2_ros
-import tf2_geometry_msgs
+from sensor_msgs.msg import Image, CameraInfo
+from geometry_msgs.msg import Quaternion, PointStamped, Pose2D
 
 from image_geometry import PinholeCameraModel
 
 
-from matplotlib import pyplot as plt  # For plotting
+top_cam_hsv_dict = {
+    "blue": {
+        "low_h": 98,
+        "high_h": 118,
+        "low_s": 154,
+        "high_s": 255,
+        "low_v": 0,
+        "high_v": 255,
+        "color_val": (255, 0, 0),
+    },
+
+    "green": {
+        "low_h": 41,  # 31
+        "high_h": 104,  # 77
+        "low_s": 94,  # 89
+        "high_s": 255,
+        "low_v": 13,  # 71
+        "high_v": 212,
+        "color_val": (0, 255, 0),
+    },
+
+    "red": {
+        "low_h": [0, 161],
+        "high_h": [11, 180],  # 0
+        "low_s": 96,
+        "high_s": 255,
+        "low_v": 47,
+        "high_v": 255,
+        "color_val": (0, 0, 255),
+    }
+}
 
 
 class TopBlockDetector(BlockDetector):
@@ -50,11 +76,14 @@ class TopBlockDetector(BlockDetector):
         self.font_size = 0.5
         self.font_thickness = 1
 
-        self.center_dist_thresh = 200
+        # The maximum pixel dimensions of block "units"
         self.one_unit_max = 22
         self.two_unit_max = 34
         self.three_unit_max = 48
         self.four_unit_max = 60
+
+        self.morph_opening_kernel = (1, 1)
+        self.morph_closing_kernel = (2, 2)
 
         self.block_obs_array = BlockObservationArray()
 
@@ -113,6 +142,8 @@ class TopBlockDetector(BlockDetector):
                       ])
 
         self.enable_rviz_markers = True
+
+        self.hsv_dict = top_cam_hsv_dict
 
     def create_debugging_publisher(self):
         BlockDetector.create_debugging_publisher(self)
