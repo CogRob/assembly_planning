@@ -4,7 +4,8 @@ import numpy as np  # For matrix operations
 import cv2  # OpenCV
 import math  # For math operations
 
-from block_mover.msg import BlockObservation, BlockObservationArray
+from block_mover.msg import BlockObservation, BlockObservationArray, \
+    BlockPixelLoc, BlockPixelLocArray
 
 # ROS imports
 import rospy
@@ -14,7 +15,7 @@ from cv_bridge import CvBridge
 # ROS messages
 from sensor_msgs.msg import Image, CameraInfo, Range
 from visualization_msgs.msg import Marker, MarkerArray
-from geometry_msgs.msg import Point, Quaternion, PointStamped
+from geometry_msgs.msg import Point, Quaternion, PointStamped, Pose2D
 import tf2_ros
 import tf2_geometry_msgs
 
@@ -122,9 +123,10 @@ colors = {
 TUNE_HSV_VALS = False
 
 
-class BlockDetector(object):
+class BlockDetector():
     def __init__(self, resolution, allowed_circle_center,
-                 allowed_circle_diameter):
+                 allowed_circle_diameter,
+                 allowed_circle_thickness, pub_rate):
         self.image_width = resolution[0]
         self.image_height = resolution[1]
 
@@ -132,6 +134,8 @@ class BlockDetector(object):
 
         self.allowed_circle_center = allowed_circle_center
         self.allowed_circle_diameter = allowed_circle_diameter
+
+        self.allowed_circle_thickness = allowed_circle_thickness
 
         self.curr_image = np.zeros((self.image_height, self.image_width, 3))
 
@@ -182,43 +186,44 @@ class BlockDetector(object):
         self.store_segmented_images = False
 
         self.font = cv2.FONT_HERSHEY_SIMPLEX
+        self.pub_rate = rospy.Rate(pub_rate)  # In Hz
 
     def create_debugging_publisher(self):
         # The HSV segmented images
         self.red_seg_image_pub = rospy.Publisher(
             "block_detector/" + self.camera + "/red_segmented_image",
             Image,
-            queue_size=1)
+            queue_size=10)
         self.yellow_seg_image_pub = rospy.Publisher(
             "block_detector/" + self.camera + "/yellow_segmented_image",
             Image,
-            queue_size=1)
+            queue_size=10)
         self.blue_seg_image_pub = rospy.Publisher(
             "block_detector/" + self.camera + "/blue_segmented_image",
             Image,
-            queue_size=1)
+            queue_size=10)
         self.green_seg_image_pub = rospy.Publisher(
             "block_detector/" + self.camera + "/green_segmented_image",
             Image,
-            queue_size=1)
+            queue_size=10)
 
         # The image with bounded boxes around detected blocks
         self.bounded_image_pub = rospy.Publisher(
             "block_detector/" + self.camera + "/bounded_image",
             Image,
-            queue_size=1)
+            queue_size=10)
 
         # RVIZ markers for debugging
         self.marker_pub = rospy.Publisher(
             "block_detector/" + self.camera + "/block_markers",
             MarkerArray,
-            queue_size=1)
+            queue_size=10)
 
         # Rays from the camera to detected blocks for debugging
         self.ray_marker_pub = rospy.Publisher(
             "block_detector/" + self.camera + "/image_rays",
             MarkerArray,
-            queue_size=1)
+            queue_size=10)
 
     def publish_debugging(self):
         self.red_seg_image_pub.publish(self.cv_bridge.cv2_to_imgmsg(
@@ -337,7 +342,7 @@ class BlockDetector(object):
     def draw_detected_blocks(self):
         image = self.curr_image.copy()
         cv2.circle(image, self.allowed_circle_center,
-                   self.allowed_circle_diameter + 110, (0, 0, 0), 220)
+                   self.allowed_circle_diameter + self.allowed_circle_thickness/2, (0, 0, 0), self.allowed_circle_thickness)
 
         for detected_block in self.detected_blocks:
             # Draw bounding box in color
@@ -357,10 +362,11 @@ class BlockDetector(object):
 
             cv2.putText(image,
                         str(detected_block["block_width"]) + "x" +
-                        str(detected_block["block_length"]) +
-                        " A: " +
-                        str(math.degrees(
-                            round(detected_block["block_angle"], 2))),
+                        str(detected_block["block_length"]),
+                        # For printing angle on image uncomment:
+                        # + " A: " +
+                        # str(math.degrees(
+                        #    round(detected_block["block_angle"], 2))),
                         detected_block["block_center"],
                         self.font, self.font_size, colors[detected_block["color"]
                                                           ]["color_val"],
@@ -375,6 +381,7 @@ class BlockDetector(object):
         return image
 
     def get_block_type(self, block_length, block_width):
+        pass
         if(block_length < self.one_unit_max):
             length = 1
         elif(block_length < self.two_unit_max):
@@ -498,7 +505,8 @@ def hsv_threshold_image(image, color, h_range, s_range, v_range):
     return masked_image, hsv_mask
 
 
-def create_block_marker(frame, id, position, orientation, length, width, block_color, transparency):
+def create_block_marker(frame, id, position, orientation, length, width,
+                        block_color, transparency):
     curr_marker = Marker()
     curr_marker.header.frame_id = frame
 
@@ -560,250 +568,3 @@ def line_plane_intersection(plane_normal, plane_point, ray_direction,
     psi = w + si * ray_direction + plane_point
 
     return psi
-
-
-class TopBlockDetector(BlockDetector):
-    def __init__(self):
-        BlockDetector.__init__(self, resolution=(640, 480),
-                               allowed_circle_center=(315, 255),
-                               allowed_circle_diameter=201)
-
-        self.camera = "top"
-
-        self.blob_area_min_thresh = 40
-        self.blob_area_max_thresh = 1200
-
-        # Constant
-        self.table_dist = 1.33
-
-        # Camera reference frame origin
-        self.ray_point = np.array([0, 0, 0])
-
-        self.table_to_base_dist = -0.1
-        self.store_segmented_images = True
-
-        self.font_size = 0.5
-        self.font_thickness = 1
-
-        self.center_dist_thresh = 200
-        self.one_unit_max = 22
-        self.two_unit_max = 34
-        self.three_unit_max = 48
-        self.four_unit_max = 60
-
-        # Get TF from top camera to base
-        try:
-            self.tf_listener = tf.TransformListener()
-            time = rospy.Time(0)
-
-            self.tf_listener.waitForTransform(
-                "/base", "/camera_rgb_optical_frame", time, rospy.Duration(4))
-
-            (self.trans, self.rot) = self.tf_listener.lookupTransform(
-                "/base", "/camera_rgb_optical_frame", time)
-
-        except (tf.LookupException, tf.ConnectivityException):
-            rospy.loginfo("No transform from base to camera available!")
-
-        # From base reference frame table normal and point on table
-        table_plane_normal_base = PointStamped()
-        table_plane_normal_base.header.frame_id = "base"
-
-        table_plane_normal_base.header.stamp = rospy.Time(0)
-        table_plane_normal_base.point.x = 0
-        table_plane_normal_base.point.y = 0
-        table_plane_normal_base.point.z = -1000.
-
-        table_plane_point_base = PointStamped()
-        table_plane_point_base.header.frame_id = "base"
-        table_plane_point_base.header.stamp = rospy.Time(0)
-        table_plane_point_base.point.x = 0
-        table_plane_point_base.point.y = 0
-        table_plane_point_base.point.z = self.table_to_base_dist
-
-        # Covert to camera reference frame
-        table_plane_normal_cam_p = self.tf_listener.transformPoint(
-            "camera_rgb_optical_frame", table_plane_normal_base)
-
-        table_plane_point_cam_p = self.tf_listener.transformPoint(
-            "camera_rgb_optical_frame", table_plane_point_base)
-
-        # Convert to arrays
-        self.table_plane_normal_cam = \
-            np.array([table_plane_normal_cam_p.point.x,
-                      table_plane_normal_cam_p.point.y,
-                      table_plane_normal_cam_p.point.z
-                      ])
-
-        self.table_plane_point_cam = \
-            np.array([table_plane_point_cam_p.point.x,
-                      table_plane_point_cam_p.point.y,
-                      table_plane_point_cam_p.point.z
-                      ])
-
-        self.enable_rviz_markers = True
-
-    def create_debugging_publisher(self):
-        BlockDetector.create_debugging_publisher(self)
-
-    def create_block_obs_publisher(self):
-        self.pub_rate = rospy.Rate(1)  # in Hz
-        self.block_obs_pub = rospy.Publisher(
-            "block_detector/top/block_obs", BlockObservationArray, queue_size=1)
-
-    def subscribe(self):
-        self.cam_sub = rospy.Subscriber("/camera/rgb/image_rect_color", Image,
-                                        self.cam_callback)
-        self.cam_info_sub = rospy.Subscriber(
-            "/camera/rgb/camera_info", CameraInfo, self.cam_info_callback)
-
-    def cam_callback(self, data):
-        BlockDetector.cam_callback(self, data)
-
-        self.generate_block_obs()
-
-    def cam_info_callback(self, data):
-        self.camera_model = PinholeCameraModel()
-        self.camera_model.fromCameraInfo(data)
-
-        # Unsubscribe after receiving CameraInfo first time
-        self.cam_info_sub.unregister()
-
-    def generate_block_obs(self):
-        block_obs_list = []
-        # Reset block markers list
-        self.block_markers.markers = []
-
-        for detected_block in self.detected_blocks:
-            block_center = detected_block["block_center"]
-            block_angle = detected_block["block_angle"]
-            block_length = detected_block["block_length"]
-            block_width = detected_block["block_width"]
-            block_color = detected_block["color"]
-
-            # Project pixel coordinates of detected block to a ray from
-            # camera link (in camera's reference frame)
-            block_ray_vector = np.array(
-                self.camera_model.projectPixelTo3dRay(block_center))
-
-            block_position_cam_arr = line_plane_intersection(
-                self.table_plane_normal_cam, self.table_plane_point_cam,
-                block_ray_vector, self.ray_point)
-
-            block_position_cam = PointStamped()
-            block_position_cam.header.frame_id = "camera_rgb_optical_frame"
-            block_position_cam.header.stamp = rospy.Time(0)
-            block_position_cam.point.x = block_position_cam_arr[0]
-            block_position_cam.point.y = block_position_cam_arr[1]
-            block_position_cam.point.z = block_position_cam_arr[2]
-
-            block_position_base = self.tf_listener.transformPoint(
-                "base", block_position_cam)
-
-            #block_position_base.point.z = self.table_to_base_dist
-
-            # TODO: Check if block_angle is pitch, yaw or roll
-            block_orientation_cam = tf.transformations.quaternion_from_euler(
-                0, 0, block_angle)
-
-            # TODO: Check order of quaternion multiplication
-            block_orientation_base = tf.transformations.quaternion_multiply(
-                # block_orientation_cam, self.rot)
-                self.rot, block_orientation_cam)
-
-            """
-            block_ray = block_ray_orig.copy()
-            block_ray[0] = block_ray_orig[2]
-            block_ray[1] = -block_ray_orig[0]
-            block_ray[2] = -block_ray_orig[1]
-
-            # Scale the ray by the distance from the camera to the table
-            # to find it's intersection with the table plane, and then
-            block_ray *= self.table_dist
-
-            # Make homogeneous and flatten array
-            homog_ray = np.concatenate((block_ray, np.ones(1))).reshape((4, 1))
-
-            block_xyz = np.dot(self.top_to_base_mat, homog_ray)
-
-            block_position = Point(
-                x=block_xyz[0], y=block_xyz[1], z=self.table_to_base_dist)
-            block_orientation_arr = tf.transformations.quaternion_from_euler(
-                0, 0, block_angle)
-            """
-
-            block_orientation_base = Quaternion(*block_orientation_base)
-            """
-            block_orientation.x = block_orientation_base[0]
-            block_orientation.y = block_orientation_base[1]
-            block_orientation.z = block_orientation_base[2]
-            block_orientation.w = block_orientation_base[3]
-            """
-
-            if(self.enable_rviz_markers):
-                self.block_markers.markers.append(
-                    create_block_marker(frame="base",
-                                        id=len(
-                                            self.block_markers.markers),
-                                        position=block_position_base.point,
-                                        orientation=block_orientation_base,
-                                        length=block_length, width=block_width,
-                                        block_color=block_color,
-                                        transparency=1)
-                )
-
-
-class HandBlockDetector(BlockDetector):
-    def __init__(self):
-        BlockDetector.__init__(self, resolution=(1280, 800))
-        self.camera = "right_hand"
-
-        self.font_size = 3.0
-        self.font_thickness = 2
-
-        self.enable_rviz_markers = False
-
-    def create_publisher(self):
-        self.pub_rate = rospy.Rate(1)  # in Hz
-        pass
-
-    def create_debugging_publisher(self):
-        BlockDetector.create_debugging_publisher(self)
-
-    def subscribe(self):
-        self.cam_sub = rospy.Subscriber("/cameras/right_hand_camera/image",
-                                        Image, self.cam_callback)
-        self.ir_sub = rospy.Subscriber("/robot/range/right_hand_range/state",
-                                       Range, self.ir_callback)
-
-    def ir_callback(self, data):
-        ir_reading = data.range
-
-        # 0.65 meters is the upper limit of the IR sensor on Baxter
-        if (self.ir_reading > 0.65):
-            ir_reading = 0.4
-
-        self.blob_area_min_thresh = 400 / ir_reading  # TODO: Tune
-        self.blob_area_max_thresh = 100000  # TODO: Tune
-
-        self.camera_height = ir_reading
-
-
-# Testing for TopBlockDetector
-def main():
-    rospy.init_node("top_block_detector")
-
-    top_block_detector = TopBlockDetector()
-
-    top_block_detector.subscribe()
-    top_block_detector.create_block_obs_publisher()
-    top_block_detector.create_debugging_publisher()
-
-    while (not rospy.is_shutdown()):
-        top_block_detector.pub_rate.sleep()
-        top_block_detector.publish_debugging()
-        top_block_detector.publish_markers()
-
-
-if __name__ == "__main__":
-    main()
