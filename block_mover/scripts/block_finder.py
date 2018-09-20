@@ -34,7 +34,7 @@ TUNE_HSV_VALS = False
 
 # TODO; Store all of these in a param file somewhere
 if(TOP_CAM):
-    BLU_LOW_HUE = 98  
+    BLU_LOW_HUE = 98
     BLU_HIGH_HUE = 118
     BLU_LOW_SAT = 154
     BLU_HIGH_SAT = 255
@@ -56,7 +56,7 @@ if(TOP_CAM):
     TEAL_HIGH_VAL = 25
 
     RED_LOW_HUE_1 = 0
-    RED_HIGH_HUE_1 = 0 
+    RED_HIGH_HUE_1 = 0
     RED_LOW_HUE_2 = 161
     RED_HIGH_HUE_2 = 180
     RED_LOW_SAT = 96
@@ -198,8 +198,6 @@ RES_640x400 = False
 # From https://github.com/botforge/ColorTrackbar
 
 
-
-
 class BlockFinder():
     def __init__(self, camera):
         self.camera = camera
@@ -325,7 +323,7 @@ class BlockFinder():
         self.cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
 
         self.find_blocks()
-        
+
     '''
     Thresholds camera image and stores object centroid location (x,y) in 
     Baxter's base frame.
@@ -514,10 +512,10 @@ class BlockFinder():
 
                         # cx = cx - self.camera_model.cx()
                         # cy = cy - self.camera_model.cy()
-                        print("Color: ", color, " Box: ", box)  
+                        print("Color: ", color, " Box: ", box)
                         cv2.drawContours(
                             cv_image, [box], 0, color_vals[color], 1)
-                        
+
                         # Outlines for Barbell Task
                         """
                         cv2.rectangle(cv_image, (216 - 5, 251 + 5), (244 + 5,238 - 5), (0,0,0), 1) 
@@ -662,7 +660,6 @@ class BlockFinder():
                                 block_angle = tf.transformations.quaternion_from_euler(
                                     rot_quat)
                             """
-                                
 
                             # Create a marker to visualize in RVIZ
                             curr_marker = create_block_marker(frame="base", id=len(block_marker_list.markers), position=block_position_p,
@@ -670,8 +667,7 @@ class BlockFinder():
 
                             rospy.loginfo("Adding new marker")
                             block_marker_list.markers.append(curr_marker)
-                            
-                            
+
                             #block_pose_list.append(Pose(position=block_position_p, orientation=block_orientation))
 
                             # TODO: The block angle will still be wrong. Need to transform it from the camera coordinate to the world frame
@@ -793,6 +789,7 @@ class BlockFinder():
 
         # clean up our resources
         cv2.destroyAllWindows()
+
 
 def nothing(x):
     pass
@@ -1140,12 +1137,12 @@ def main():
                 block_finder.block_markers.markers))
             block_finder.marker_pub.publish(block_finder.block_markers)
 
-            #curr_marker = create_block_marker(frame="base", id=len(block_marker_list.markers), position=block_position_p,
+            # curr_marker = create_block_marker(frame="base", id=len(block_marker_list.markers), position=block_position_p,
             #                                       orientation=block_orientation, length=block_length, width=block_width, block_color=color, transparency=self.transparency)
 
             rospy.loginfo("Adding new marker")
-            #block_marker_list.markers.append(curr_marker)
-            
+            # block_marker_list.markers.append(curr_marker)
+
             # Publish ray from camera lens to detected object
             rospy.loginfo("There are %d ray markers", len(
                 block_finder.ray_markers.markers))
