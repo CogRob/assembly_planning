@@ -20,10 +20,32 @@
 * Split code for simulation and code for robot better
 
 ### Ease of Use Improvements
-* Create a launch file for top and hand BlockDetectors
-* top_block_detector.launch: Should launch OpenNI2 driver, Kinect to Baxter's base TF broadcaster, and run top camera block detector
-* hand_block_detector.launch: Should set Baxter's hand camera resolution to 1280x800 and run hand camera block detector
+* Create a launch file for top and hand BlockDetectors DONE
+* top_block_detector.launch: Launches OpenNI2 driver, Kinect to Baxter's base TF broadcaster (top_to_gripper_bc), and runs top camera block detector
+Launch openni2 to publish ASUS camera data
+```
+roslaunch openni2_launch openni2.launch
+```
+Publish the TF from extrinsic calibration
+```
+roslaunch easy_handeye publish.launch
+```
+Run top camera block detector
+```
+rosrun block_mover top_block_detector.py
+
+* hand_block_detector.launch:
+Set Baxter's hand camera resolution to 1280x800 
+```
+rosrun baxter_tools camera_tools.py -o "right_hand_camera" -r 1280x800
+```
+Run hand camera block detector
+```
+rosrun block_mover hand_block_detector.py
+```
+
 * Add a functionality to switch the workspace and the inventory so we don't need to reset inventory after each mission
+
 * Add instructions for use to this README
 
 ### Nice to Haves
