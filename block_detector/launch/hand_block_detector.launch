@@ -1,0 +1,9 @@
+<launch>
+    <!-- Should be run on desktop -->
+    <!-- Turn on camera at Highest Resolution setting -->
+    <node pkg="baxter_tools" type="camera_control.py" name="camera_control" args='-o "right_hand_camera" -r 1280x800'/>
+
+    <!-- Start Baxter's right hand camera' block detector -->
+    <node pkg="block_detector" type="hand_block_detector.py" name="hand_block_detector"/>
+
+</launch>
