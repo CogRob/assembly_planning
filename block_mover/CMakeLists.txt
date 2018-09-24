@@ -13,19 +13,19 @@ find_package(catkin REQUIRED COMPONENTS
   visualization_msgs
 )
 
-add_message_files(
-  FILES
-  BlockObservationArray.msg
-  BlockObservation.msg
-  BlockPixelLocArray.msg
-  BlockPixelLoc.msg
-)
+#add_message_files(
+#  FILES
+#  BlockObservationArray.msg
+#  BlockObservation.msg
+#  BlockPixelLocArray.msg
+#  BlockPixelLoc.msg
+#)
 
-generate_messages(
-  DEPENDENCIES
-  std_msgs
-  geometry_msgs
-)
+#generate_messages(
+#  DEPENDENCIES
+#  std_msgs
+#  geometry_msgs
+#)
 
 catkin_package(
   CATKIN_DEPENDS
