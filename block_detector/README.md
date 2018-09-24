@@ -52,6 +52,3 @@ rosrun block_mover hand_block_detector.py
 * Make RViz Block markers Look like blocks 
 
 
-
-
-
