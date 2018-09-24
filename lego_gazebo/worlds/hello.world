@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<sdf version="1.4">
+  <world name="default">
+    <include>
+      <uri>model://ground_plane</uri>
+    </include>
+    <include>
+      <uri>model://sun</uri>
+    </include>
+    <include>
+      <uri>model://cafe_table</uri>
+      <pose>0 0 0  0 0 0</pose>
+    </include>
+    <include>
+      <pose>00.15 0 1  0 0 0</pose>
+      <uri>model://megabloks1x1</uri>
+    </include>
+    <include>
+      <pose>0 0 1  0 0 0</pose>
+      <uri>model://megabloks1x2</uri>
+    </include>
+    <include>
+      <pose>-0.15 0 1  0 0 0</pose>
+      <uri>model://megabloks1x3</uri>
+    </include>
+  </world>
+</sdf>
