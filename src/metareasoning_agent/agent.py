@@ -71,7 +71,7 @@ class Agent(object):
         # Baxter specific variables
         self._limb_name = limb
         self._hover_distance = hover_distance_  # in meters
-        self._table_distance = -0.10
+        self._table_distance = -0.095
         self._verbose = verbose  # bool
         self._limb = baxter_interface.Limb(limb)
         self._gripper = baxter_interface.Gripper(limb)
@@ -107,7 +107,7 @@ class Agent(object):
 
         self._overhead_orientation = Quaternion(x=0, y=1, z=0, w=0)
 
-        self._start_position = Point(x=0.5, y=-0.75, z=0)
+        self._start_position = Point(x=0.25 y=-0.75, z=.75)
 
         self._start_pose = Pose(
             position=self._start_position,
@@ -266,6 +266,7 @@ class Agent(object):
         self._guarded_move_to_joint_position(joint_angles)
 
     def _align(self, orientation, block=None):
+        rospy.loginfo("Aligning.....")
         if block is None:
             # This is a place align. Adjust gripper to orientation and return the new pose
             if(orientation == 0):
@@ -299,7 +300,7 @@ class Agent(object):
                             )
                             continue
                         else:
-                            block_angle = pixel_loc.theta
+                            block_angle = math.pi - pixel_loc.theta
 
                 block_pixel_locs = self._get_updated_pixel_locs()
 
@@ -308,7 +309,7 @@ class Agent(object):
                 return None
             else:
                 rospy.loginfo(
-                    "Aligning with %s colored %dx%d block with angle %f about with orientation %f",
+                    "Aligning with %s colored %dx%d block with angle %f about with orientation %d",
                     block.color, block.width, block.length, block_angle,
                     orientation)
 
@@ -356,16 +357,17 @@ class Agent(object):
 
             # Rotate block_angle by 90 so that gripper will be perpendicular to blocks major axis
             if (orientation == 1):
-                #rotation_angle = block_angle + math.pi / 2
-                rotation_angle = block_angle + math.pi / 2
+                rotation_angle = block_angle + math.pi/2
+
             # Just rotate by block angle
             elif (orientation == 0):
-                #rotation_angle = block_angle
                 rotation_angle = block_angle
             else:
                 rospy.logerr(
                     "Rotation should either be a 1 for 90 degree rotation or a 0 for no rotation"
                 )
+
+            rospy.loginfo("Rotation angle before clamp: %f ", rotation_angle)
 
             # Clamp block angle between pi and -pi
             if (rotation_angle > math.pi):
@@ -374,10 +376,12 @@ class Agent(object):
             elif (rotation_angle < -math.pi):
                 rospy.loginfo("Rotation angle < -math.pi")
                 rotation_angle += (2 * math.pi)
+
+            rospy.loginfo("Rotation angle after clamp: %f", rotation_angle)
             # TODO: Uncomment to enable initial rotation of gripper
 
             rospy.loginfo("Rotating gripper by %f degrees",
-                          math.degrees(rotation_angle))
+                          math.degrees(block_angle))
             new_pose = self._rotate_gripper(block_angle)
 
             block_pixel_locs = self._get_updated_pixel_locs()
