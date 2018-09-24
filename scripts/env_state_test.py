@@ -119,13 +119,13 @@ def main():
     #  B
     # BBB  Barbell
     green_1x2 = kb.Block(length=2, width=1, color="green")
-    green_1x2_final_position = Point(x=0.813, y=-0.258, z=0.0)
+    green_1x2_final_position = Point(x=0.554, y=-0.239, z=0.0)
 
     blue_1x4 = kb.Block(length=4, width=1, color="blue")
-    blue_1x4_final_position = Point(x=0.738, y=-0.243, z=0.0)
+    blue_1x4_final_position = Point(x=.637, y=-0.242, z=0.0)
 
     red_1x2 = kb.Block(length=2, width=1, color="red")
-    red_1x2_final_position = Point(x=0.664, y=-0.227, z=0.0)
+    red_1x2_final_position = Point(x=0.728, y=-0.247, z=0.0)
 
     green_1x2_pnp = generate_pick_and_place(
         green_1x2, green_1x2_final_position, 0, 1)
@@ -147,7 +147,7 @@ def main():
     blue_1x4_block = kb.Block(
         length=4, width=1, color="blue", pose=blue_1x4_desired)
     red_1x2_block = kb.Block(
-        length=4, width=1, color="red", pose=red_1x2_desired)
+        length=2, width=1, color="red", pose=red_1x2_desired)
 
     expectation = kb.EnvState()
     expectation.add_block(green_1x2_block)
