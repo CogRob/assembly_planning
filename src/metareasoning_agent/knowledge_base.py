@@ -42,10 +42,11 @@ class Block(object):
 
 
 class Constraints(object):
-    def __init__(self, block=None, position=None, orientation=None):
+    def __init__(self, block=None, position=None, orientation=None, grip=None):
         self.position = position
         self.block = block
         self.orientation = orientation
+        self.grip = grip
 
     def is_Block(self):
         """checking for kind of constraint"""
