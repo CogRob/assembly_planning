@@ -63,8 +63,15 @@
 
 
   <!-- The export tag contains other, unspecified, tags -->
+<<<<<<< HEAD
   <export>
     <!-- Other tools can request additional information be placed here -->
 
+=======
+    <!-- Other tools can request additional information be placed here -->
+  <export>
+    <gazebo_ros gazebo_model_path="${prefix}/models"/>
+    <gazebo_ros gazebo_media_path="${prefix}/models"/>
+>>>>>>> 631b41300eadf01d45a7ad961beef504a546e354
   </export>
 </package>
