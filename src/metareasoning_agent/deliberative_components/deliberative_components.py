@@ -3,6 +3,7 @@
 Class for rule-based planner for supporting meta-reasoning and agent class
 """
 from collections import deque
+from itertools import permutations
 import logging
 from Queue import PriorityQueue
 import networkx as nx
@@ -52,18 +53,6 @@ def expand_missions(missions):
     # map it to a list of blocks whose poses are a function of the
     # input
     return missions
-
-
-def permute_list(items):
-    """
-    Takes a list of elements and returns a list of permutations, inclusive
-    """
-    if len(items) == 1:
-        return items
-    permuted_lists = permute_list(items[1:])
-    for sequence in permuted_lists:
-        sequence.insert(0, items[0])
-    return permuted_lists
 
 
 def print_blocks(state):
@@ -173,24 +162,25 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         self._logger = logging.getLogger(
             'metareasoning_agent.deliberative_components.Planner')
         # database init
-        self._method2action_db = {}
-        self._mission2method_db = {}
         self._task2mission_db = {}
+        self._mission2method_db = {}
+        self._method2action_db = {}
         # current state of the world
-        self._state = None  # type: EnvState
-        # state-ful variables
-        # element in ranked_mission_idx:
-        # (rank, idx of plan in self._mission_plans)
-        self._ranked_mission_idx = PriorityQueue()
+        self._state = EnvState()
+        # decomposition variables
         self._mission_plans = []
-        self._mission_ptr = -1
         self._method_plans = []
+        self._action_plans = []  # only filled when required for method2action
+        # book-keeping variables for traversing through decompositions
+        self._mission_ptr = -1
         self._method_ptr = -1
-        self._action_plan = []  # only filled when required for method2action
+        self._action_ptr = -1
+        self._ranked_mission_idx = PriorityQueue()
+        self._curr_action_plan = []
         self._mission_result = False
-        self._method_result = False
         self._task = None
         self._multiple_mode = False
+        # populate reqd databases
         self._populate_task2mission_rules()
         self._populate_method2action()
 
@@ -212,7 +202,7 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         """
 
         # generating possible missions for task1 - 1x2 over 1x4
-        self._mission2method_db['pyramid'] = []
+        self._task2mission_db['pyramid'] = []
         # append the 1x2 + 1x4 mission
         pose_1x2 = Pose()
         pose_1x4 = Pose()
@@ -220,7 +210,7 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         plan = []
         plan.append((Block(1, 2), pose_1x2))
         plan.append((Block(1, 4), pose_1x4))
-        self._mission2method_db['pyramid'].append(permute_list(plan))
+        self._task2mission_db['pyramid'].extend(list(permutations(plan)))
         # append the 1x1 + 1x2 + 1x2 + 1x1 mission
         pose_1x1 = Pose()
         # TODO: fill these damned Poses
@@ -231,7 +221,7 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         plan.append((Block(1, 2), pose_1x2))
         plan.append((Block(1, 2), pose_1x2))
         plan.append((Block(1, 1), pose_1x1))
-        self._mission2method_db['pyramid'].append(permute_list(plan))
+        self._task2mission_db['pyramid'].extend(list(permutations(plan)))
         # append the 1x1,1x1 over 1x2,1x2 mission
         # TODO: fill these damned Poses
         plan = []
@@ -239,7 +229,7 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         plan.append((Block(1, 2), pose_1x2))
         plan.append((Block(1, 2), pose_1x2))
         plan.append((Block(1, 1), pose_1x1))
-        self._mission2method_db['pyramid'].append(permute_list(plan))
+        self._task2mission_db['pyramid'].extend(list(permutations(plan)))
         # append the 1x2 over 1x3,1x1 mission
         # TODO: fill these damned Poses
         plan = []
@@ -247,17 +237,17 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         plan.append((Block(1, 2), pose_1x2))
         plan.append((Block(1, 2), pose_1x2))
         plan.append((Block(1, 1), pose_1x1))
-        self._mission2method_db['pyramid'].append(permute_list(plan))
+        self._task2mission_db['pyramid'].extend(list(permutations(plan)))
 
         # generating possible missions for L-shape task
-        self._mission2method_db['barbell'] = []
+        self._task2mission_db['barbell'] = []
         # 2.1 1x4 perp 1x1,1x1
         # TODO: fill these damned Poses
         plan = []
         plan.append((Block(1, 4), pose_1x4))
         plan.append((Block(1, 1), pose_1x1))
         plan.append((Block(1, 1), pose_1x1))
-        self._mission2method_db['barbell'].append(permute_list(plan))
+        self._task2mission_db['barbell'].extend(list(permutations(plan)))
         # 2.2 1x3 perp 1x3
         plan = []
         # TODO: fill these damned Poses
@@ -265,7 +255,7 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         plan.append((Block(1, 3), pose_1x3))
         plan.append((Block(1, 2), pose_1x2))
         plan.append((Block(1, 1), pose_1x1))
-        self._mission2method_db['barbell'].append(permute_list(plan))
+        self._task2mission_db['barbell'].extend(list(permutations(plan)))
 
     def _populate_method2action(self):
         """
@@ -302,6 +292,7 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
                 found = False
                 for key in valid_plans:
                     if valid_plans[key][0] is True:
+                        found = True
                         # insert index of plan in self._mission_plans in a
                         # priority list
                         self._ranked_mission_idx.put((valid_plans[key][1],
@@ -315,12 +306,26 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         Decompose each element of self._mission_plan into corresponding
         method-level plan
         """
+        # FIXME: this function is a mess!!
         for plan in self._mission_plans:
             decomposed_plan = []
+            stacks = []
+            stacks.append([])
+            stacks.append([])
+            stack_ptr = 0
             # "algorithm" for going from block to method list
             for (block, pose) in plan:
-                decomposed_plan.append(('acquire', block))
-                decomposed_plan.append(('deposit', block))
+                if block.length == 1 or block.length == 2:
+                constraint1 = Constraints()
+                constraint1.block = block
+                constraint2 = Constraints()
+                constraint2.position = pose
+                grip_values = [0, 1]
+                for val in grip_values:
+                    constraint1.grip = val
+                    constraint2.grip = val
+                    decomposed_plan.append(('acquire', constraint1))
+                    decomposed_plan.append(('deposit', constraint2))
             self._method_plans.append(decomposed_plan)
             self._logger.debug(
                 'Method plan created of length %d for mission of length %d',
@@ -328,8 +333,9 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
 
     def _method2action_decomposition(self):
         """Decomposes pointed-to method -> actions and constraints"""
-        # TODO: implement
-        pass
+        method = self._method_plans[self._mission_ptr][self._method_ptr]
+        print method
+        return self._method2action_db[method[0]](method[1])
 
     # external interface functions
     def setup(self, task, multiple=False):
@@ -343,13 +349,13 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         # creates a priorityqueue of plans, dependent on block availability
         self._mission_result = self._task2mission_decomposition()
         # just a general decomposition
-        self._method_result = self._mission2method_decomposition()
-        result = self._mission_result and self._method_result
-        if result is True:
+        self._mission2method_decomposition()
+        if self._mission_result is True:
             self._method_ptr = 0
             self._mission_ptr = self._ranked_mission_idx.get()[1]
+            # FIXME: the following
             self._action_plan = deque(self._method2action_decomposition())
-        return result
+        return self._mission_result
 
     def update(self, obs):
         """incoming interface to update state"""
@@ -362,7 +368,8 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         """
         if not self._action_plan:
             # check if all methods are executed, if yes
-            if self._method_ptr == len(self._method_plans[self._mission_ptr]):
+            if self._method_ptr == len(
+                    self._method_plans[self._mission_ptr]) - 1:
                 if self._multiple_mode:
                     # if multiple mode is True: mission++, method=0
                     self._mission_ptr = self._ranked_mission_idx.get()[1]
@@ -370,9 +377,7 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
                 # else: send in None
                 return None
             self._method_ptr += 1
-            current_method_plan = self._method_plans[self._mission_ptr][
-                self._method_ptr]
-            self._action_plan = deque(current_method_plan)
+            self._action_plan = deque(self._method2action_decomposition())
         # pop from action queue
         return self._action_plan.popleft()
 
@@ -383,125 +388,3 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
         if self._task == task:
             return self._action_plan
         return None
-
-
-class Learner(object):
-    """Reinforcement learner with q-learning algorithm"""
-
-    def __init__(self, debug=False):
-        # get logger
-        self._logger = logging.getLogger(__name__)
-        # constants
-        self._methods = ['a1d1', 'a2d1', 'a1d2', 'a2d2']
-        self._errortolerancexy = 0.010
-        self._errortolerancetheta = 0.087
-        self._gamma = 0.75
-        # book-keeping
-        self._expectation = EnvState()
-        self._blocks = EnvState()
-        self._mission_ptr = -1
-        self._method_ptr = -1
-        self._curr_block_ptr = -1
-        self._reward_acc = 0
-        # TODO: make constraint = Pose, GripOrientation1or2, Block
-        # to be updated by DelLayer during the switch
-        self._task = None
-        self._missions = None
-        self._method_plans = None
-        self._action_plan = None
-        # search-based max-reward-learning
-        # q-tables
-        self._mission_table = None  # 1xlen(_missions)
-        self._method_table = None  # len(_missions)x4 (constraint permutation)
-        # results
-        self._mission_idx = -1
-        self._method_idx = -1
-        # method function bindings
-        self._method_db['acquire'] = acquireroutine
-        self._method_db['deposit'] = depositroutine
-
-    def _plan_decomposition(self):
-        # TODO: use routines at top to decompose method plans received as input
-        pass
-
-    def _get_current_expectation(self):
-        """Creates expectation state from current mission sub-goal
-
-        every block-level step of the mission, this function adds to the global
-        _expectation variable so that global expectation is compared with
-        current global state
-        """
-        item = self._missions[self._mission_ptr][self._curr_block_ptr]
-        self._expectation.add_block(item[0])
-
-    def setup(self, task, mission_db, method_db):
-        """
-        Setup call for DelLayer passing required info from Planner
-        """
-        self._task = task
-        self._missions = mission_db
-        self._method_plans = method_db
-        # TODO: setup the q-tables
-        self._mission_table = [0] * len(self._missions)
-        self._method_table = {}
-        for i in range(len(self._missions)):
-            self._method_table[i] = [0] * 4
-        # setup the ptrs
-        self._mission_ptr = 0
-        self._method_ptr = 0
-        self._reward_acc = 0
-
-    def get_action(self, task):
-        """
-        Call from DelLayer to pass next_action to Agent
-        """
-        if self._method_ptr == len(self._missions[self._mission_ptr]):
-            # TODO: episode ended so tally up the total and store into q-table
-            self._mission_ptr += 1
-            self._method_ptr = 0
-            # TODO: reset all other variables
-            return None
-        self._method_ptr += 1
-        return self._action_plan[self._method_ptr - 1]
-
-    def update(self, state):
-        """incoming interface function for updating state"""
-        self._blocks = state
-        self._get_current_expectation()  # TODO: implement
-        self._curr_block_ptr += 1
-        self._reward_acc += self._calculate_reward()
-
-    def _calculate_reward(self):
-        """
-        Calculates the shaped reward for current timestep using state and task
-
-        state is EnvState from Agent.py. The comparison needs to be done
-        between the current graph and intended graph
-
-        FIXME: task right now is hand-coded, need to include in meta-reasoner
-        """
-        # nx does not support different tolerances for different edges
-        # therefore the comparison is a two-step process for xy and theta
-        node_condition = iso.categorical_node_match(['length', 'width'],
-                                                    [1, 1])
-        edge_condition1 = iso.numerical_edge_match(
-            ['delx', 'dely'], [0, 0], rtol=self._errortolerancexy)
-        edge_condition2 = iso.numerical_edge_match(
-            ['deltheta'], [0], rtol=self._errortolerancetheta)
-        result1 = nx.is_isomorphic(
-            self._expectation.ws_state,
-            self._blocks.ws_state,
-            edge_match=edge_condition1,
-            node_match=node_condition)
-        result2 = nx.is_isomorphic(
-            self._expectation.ws_state,
-            self._blocks.ws_state,
-            edge_match=edge_condition2,
-            node_match=node_condition)
-        result = result1 and result2
-        if result:
-            shaped_reward = self._gamma * len(
-                self._missions[self._mission_ptr]) - (self._mission_ptr + 1)
-            return (-1 + shaped_reward)
-        else:
-            return -1
