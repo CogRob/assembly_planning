@@ -1,0 +1,14 @@
+<launch>
+    <!-- Should be run on laptop connected to ASUS camera -->
+    <!-- Start the OpenNI Driver -->
+    <include file="$(find openni2_launch)/launch/openni2.launch"/>
+
+    <!-- Start the TF broadcaster from top camera to gripper -->
+    <node pkg="block_detector" type="top_to_gripper_bc.py" name="top_to_gripper_bc"/>
+    
+    <!-- Turn on camera at Highest Resolution setting -->
+    <node pkg="baxter_tools" type="camera_control.py" name="camera_control" args='-o "right_hand_camera" -r 1280x800'/>
+
+    <!-- Start the top camera (ASUS RealSense) block detector -->
+    <node pkg="block_detector" type="top_block_detector.py" name="top_block_detector"/>
+</launch>
