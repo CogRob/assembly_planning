@@ -76,6 +76,6 @@ class DeliberativeLayer(object):
         else:
             return self._components[self._control].get_plan(task)
 
-    def update_state(self, state):
+    def update(self, state):
         """Interface function for communicating state to components"""
-        self._components[self._control].update_state(state)
+        self._components[self._control].update(state)
