@@ -31,9 +31,9 @@ class Constraints(object):
         self.position = position
         self.orientation = orientation
 
-        if((self.block is not None and self.orientation is None) or
-           (self.position is not None and self.orientation is None) or
-           (self.position is not None and self.block is not None)):
+        if ((self.block is not None and self.orientation is None)
+                or (self.position is not None and self.orientation is None)
+                or (self.position is not None and self.block is not None)):
             rospy.logerr(
                 "The constraint you are attempting to make is not valid")
 
@@ -107,7 +107,7 @@ class Agent(object):
 
         self._overhead_orientation = Quaternion(x=0, y=1, z=0, w=0)
 
-        self._start_position = Point(x=0.25 y=-0.75, z=.75)
+        self._start_position = Point(x=0.25, y=-0.75, z=.75)
 
         self._start_pose = Pose(
             position=self._start_position,
@@ -210,10 +210,10 @@ class Agent(object):
         self._gripper.open()
 
     def _gripper_close(self, width):
-        if(width == 1):
+        if (width == 1):
             self._gripper.command_position(0.65, block=True)
 
-        elif(width == 2):
+        elif (width == 2):
             self._gripper.command_position(0.9, block=True)
 
     def _servo_to_pose(self, pose):
@@ -232,7 +232,7 @@ class Agent(object):
             # TODO: We shouldn't have to go through the list of blocks everytime, store in a dictionary in future
             # Find the location of the block to move towards
 
-            while(overhead_pose == Pose()):
+            while (overhead_pose == Pose()):
                 for block_loc in self.inv_state:
                     rospy.loginfo("Checking block: %dx%d %s", block_loc.width,
                                   block_loc.length, block_loc.color)
@@ -269,10 +269,10 @@ class Agent(object):
         rospy.loginfo("Aligning.....")
         if block is None:
             # This is a place align. Adjust gripper to orientation and return the new pose
-            if(orientation == 0):
+            if (orientation == 0):
                 return self._rotate_gripper(0)
-            elif(orientation == 1):
-                return self._rotate_gripper(math.pi/2)
+            elif (orientation == 1):
+                return self._rotate_gripper(math.pi / 2)
 
         else:
             # This is a pick align. Adjust gripper to orientation and return the new pose
@@ -357,7 +357,7 @@ class Agent(object):
 
             # Rotate block_angle by 90 so that gripper will be perpendicular to blocks major axis
             if (orientation == 1):
-                rotation_angle = block_angle + math.pi/2
+                rotation_angle = block_angle + math.pi / 2
 
             # Just rotate by block angle
             elif (orientation == 0):
@@ -452,7 +452,9 @@ class Agent(object):
 
                             # TODO: tune motion distance and possibly implement a PID that moves proportionally to the distance from goal
                             new_pose = self.move_camera_in_plane(
-                                motion_angle + math.pi, motion_dist=.006, height=self._hover_distance)
+                                motion_angle + math.pi,
+                                motion_dist=.006,
+                                height=self._hover_distance)
                             rospy.sleep(.5)
                         # TODO uncomment after testing once motion is requested
                         else:
@@ -563,7 +565,8 @@ class Agent(object):
 
         if (np.fabs(curr_z - self._hover_distance) > 0.01):
             rospy.logerr(
-                "z_position should be within 1 cm of %f meters when descend is called, but is %f", self._hover_distance, curr_z)
+                "z_position should be within 1 cm of %f meters when descend is called, but is %f",
+                self._hover_distance, curr_z)
 
         while (curr_z >= self._table_distance):
             curr_z -= 0.01
@@ -663,7 +666,7 @@ class Agent(object):
                     # We have a block that we wish to align with
                     self._actions[action](orientation_constraint,
                                           block_constraint)
-                elif(constraints.is_orientation_constraints()):
+                elif (constraints.is_orientation_constraints()):
                     block_constraint = constraints.block
                     orientation_constraint = constraints.orientation
                     self._actions[action](orientation_constraint,
@@ -675,6 +678,7 @@ class Agent(object):
 
     def get_ws(self):
         return self._ws
+
 
 # def test():
 #    """
