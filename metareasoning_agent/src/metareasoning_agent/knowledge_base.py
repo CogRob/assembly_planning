@@ -6,8 +6,8 @@ defining the Lego World
 from enum import Enum
 import networkx as nx
 from geometry_msgs.msg import Pose, Pose2D
-from metareasoning_agent.utilities import calculate_pose_diff
 import rospy
+from .utilities import calculate_pose_diff
 
 
 # Enum for fixed primitive actions
