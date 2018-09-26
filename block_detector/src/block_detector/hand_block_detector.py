@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
-from block_detector import BlockDetector
+from block_detector_base import BlockDetector
 
-from block_mover.msg import BlockPixelLoc, BlockPixelLocArray
+from block_detector.msg import BlockPixelLoc, BlockPixelLocArray
 
 # ROS imports
 import rospy
@@ -12,46 +12,16 @@ from sensor_msgs.msg import Image, Range
 
 
 # TODO; Store all of these in a param file somewhere
-hand_cam_hsv_dict = {
-    "blue": {
-        "low_h": 90,
-        "high_h": 133,
-        "low_s": 117,
-        "high_s": 225,
-        "low_v": 28,
-        "high_v": 255,
-        "color_val": (255, 0, 0),
-    },
-
-    "green": {
-        "low_h": 37,
-        "high_h": 104,
-        "low_s": 60,
-        "high_s": 199,
-        "low_v": 10,
-        "high_v": 255,
-        "color_val": (0, 255, 0),
-    },
-
-    "red": {
-        "low_h": [0, 160],
-        "high_h": [10, 180],
-        "low_s": 30,
-        "high_s": 255,
-        "low_v": 20,
-        "high_v": 255,
-        "color_val": (0, 0, 255),
-    }
-}
 
 
 class HandBlockDetector(BlockDetector):
-    def __init__(self, pub_rate):
+    def __init__(self, pub_rate, sim):
         BlockDetector.__init__(self, resolution=(1280, 800),
                                allowed_circle_center=(640, 400),
                                allowed_circle_diameter=450,
                                allowed_circle_thickness=255,
                                pub_rate=pub_rate)
+
         self.camera = "right_hand"
 
         self.font_size = 3.0
@@ -63,8 +33,70 @@ class HandBlockDetector(BlockDetector):
         self.enable_rviz_markers = False
         self.block_pixel_locs = BlockPixelLocArray()
         self.pub_rate = rospy.Rate(pub_rate)  # in Hz
+        self.sim = sim
+        if(self.sim):
+            self.hsv_dict = {
+                # "blue": {
+                #    "low_h": 90,
+                #    "high_h": 133,
+                #    "low_s": 0,
+                #    "high_s": 255,
+                #    "low_v": 0,
+                #    "high_v": 255,
+                #    "color_val": (255, 0, 0),
+                # },
 
-        self.hsv_dict = hand_cam_hsv_dict
+                "green": {
+                    "low_h": 35,
+                    "high_h": 179,
+                    "low_s": 0,
+                    "high_s": 255,
+                    "low_v": 0,
+                    "high_v": 255,
+                    "color_val": (0, 255, 0),
+                },
+                # "red": {
+                #    "low_h": [0, 160],
+                #    "high_h": [10, 180],
+                #    "low_s": 0,
+                #    "high_s": 255,
+                #    "low_v": 0,
+                #    "high_v": 255,
+                #    "color_val": (0, 0, 255),
+                # }
+            }
+        else:
+            self.hsv_dict = {
+                "blue": {
+                    "low_h": 90,
+                    "high_h": 133,
+                    "low_s": 117,
+                    "high_s": 225,
+                    "low_v": 28,
+                    "high_v": 255,
+                    "color_val": (255, 0, 0),
+                },
+
+                "green": {
+                    "low_h": 37,
+                    "high_h": 104,
+                    "low_s": 60,
+                    "high_s": 199,
+                    "low_v": 10,
+                    "high_v": 255,
+                    "color_val": (0, 255, 0),
+                },
+
+                "red": {
+                    "low_h": [0, 160],
+                    "high_h": [10, 180],
+                    "low_s": 30,
+                    "high_s": 255,
+                    "low_v": 20,
+                    "high_v": 255,
+                    "color_val": (0, 0, 255),
+                }
+            }
 
     def create_block_pixel_locs_publisher(self):
         self.block_pixel_locs_pub = rospy.Publisher(
@@ -88,6 +120,9 @@ class HandBlockDetector(BlockDetector):
         BlockDetector.cam_callback(self, data)
 
         self.generate_pixel_locs()
+
+        # To tune hsv thresholds, uncomment
+        # self.find_hsv_values()
 
     def ir_callback(self, data):
         self.ir_reading = data.range
@@ -155,13 +190,13 @@ class HandBlockDetector(BlockDetector):
 
         self.block_pixel_locs.pixel_locs = block_pixel_locs_list
 
-# Testing for HandBlockDetector
 
+# Testing for HandBlockDetector
 
 def main():
     rospy.init_node("hand_block_detector")
 
-    hand_block_detector = HandBlockDetector(pub_rate=10)
+    hand_block_detector = HandBlockDetector(pub_rate=10, sim=True)
 
     hand_block_detector.subscribe()
     hand_block_detector.create_block_pixel_locs_publisher()
