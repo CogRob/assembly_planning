@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-.vscode
-=======
 .vscode/
 *.pyc
 TODO
 .env
->>>>>>> 631b41300eadf01d45a7ad961beef504a546e354
