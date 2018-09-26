@@ -33,6 +33,7 @@ roslaunch easy_handeye publish.launch
 Run top camera block detector
 ```
 rosrun block_mover top_block_detector.py
+```
 
 * hand_block_detector.launch:
 Set Baxter's hand camera resolution to 1280x800 
