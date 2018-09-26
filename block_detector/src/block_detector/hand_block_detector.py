@@ -131,7 +131,11 @@ class HandBlockDetector(BlockDetector):
         if (self.ir_reading > 0.65):
             self.ir_reading = 0.4
 
-        self.blob_area_min_thresh = 400 / self.ir_reading  # TODO: Tune
+        if(self.ir_reading != 0):
+            self.blob_area_min_thresh = 400 / self.ir_reading  # TODO: Tune
+        else:
+            self.blob_area_min_thresh = 400  # TODO: Tune
+
         self.blob_area_max_thresh = 100000  # TODO: Tune
 
         self.camera_height = self.ir_reading
