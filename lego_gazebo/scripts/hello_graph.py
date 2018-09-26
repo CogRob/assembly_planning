@@ -1,4 +1,4 @@
-#!/bin/env python
+#!/usr/bin/env python
 import logging
 from metareasoning_agent.knowledge_base import Block, EnvState
 import networkx as nx
@@ -6,27 +6,36 @@ import rospkg
 import rospy
 import sys
 
-from gazebo_msgs.msg import (
+from baxter_sim_example import PickAndPlace
+
+from geometry_msgs.msg import (
     Pose,
     Point,
+    Pose2D,
 )
 from gazebo_msgs.srv import (
     SpawnModel,
     DeleteModel,
 )
+from std_msgs.msg import (
+    Empty, )
 
 
 class GazeboSimulator(object):
     """ TODO: docstring for GazeboSimulator"""
 
-    def __init__(self, arg):
+    def __init__(self):
         super(GazeboSimulator, self).__init__()
-        self.state = EnvState()
-        self.table_pose = Pose(position=Point(x=1.0, y=0.0, z=0.0))
-        self.table_reference_frame = "world"
+        self._real_table_ht = 0.81
+        self._gazebo_table_ht = 0.755
         self._model_dict = {}
-        self._populate_dictionary()
+        self.state = EnvState()
+        self.table_pose = Pose(
+            position=Point(
+                x=1.0, y=0.0, z=self._real_table_ht - self._gazebo_table_ht))
+        self.table_reference_frame = "world"
         self.block_num = 0
+        self._populate_dictionary()
 
     def _populate_dictionary(self):
         self._model_dict['1x2'] = 'megabloks1x2/model.sdf'
@@ -51,15 +60,16 @@ class GazeboSimulator(object):
         # Load Blocks SDF as described in the EnvState graph
         block_reference_frame = 'world'
         self.block_num = 0
-        for node in self.state.ws_state.nodes():
+        for node, data in self.state.ws_state.nodes(data=True):
             block_xml = ''
             # read the block model SDF
-            with open(model_path + self._model_dict[str(node['width']) + 'x' +
-                                                    str(node['length'])],
+            with open(model_path + self._model_dict[str(data['length']) + 'x' +
+                                                    str(data['width'])],
                       'r') as block_file:
                 block_xml = block_file.read().replace('\n', '')
             block_pose = Pose(
-                position=Point(x=node['pose_x'], y=node['pose_y'], z=0.7825))
+                position=Point(
+                    x=data['pose_x'], y=data['pose_y'], z=self._real_table_ht))
             # spawn the block sdf
             rospy.wait_for_service('/gazebo/spawn_sdf_model')
             try:
@@ -88,12 +98,32 @@ class GazeboSimulator(object):
 
 def main():
     rospy.init_node('hello_graph')
+    robot = False
+    if robot:
+        # Wait for the All Clear from emulator startup
+        rospy.wait_for_message("/robot/sim/started", Empty)
+
+        limb = 'left'
+        hover_distance = 0.15  # meters
+        # Starting Joint angles for left arm
+        starting_joint_angles = {
+            'left_w0': 0.6699952259595108,
+            'left_w1': 1.030009435085784,
+            'left_w2': -0.4999997247485215,
+            'left_e0': -1.189968899785275,
+            'left_e1': 1.9400238130755056,
+            'left_s0': -0.08000397926829805,
+            'left_s1': -0.9999781166910306
+        }
+        pnp = PickAndPlace(limb, hover_distance)
+        # Move to the desired starting angles
+        pnp.move_to_start(starting_joint_angles)
     sim = GazeboSimulator()
     # TODO: populate the graph
     block1 = Block(1, 2)
     block2 = Block(1, 3)
-    block1.pose = Pose(position=Point(x=1.0, y=1.0, z=0.07825))
-    block2.pose = Pose(position=Point(x=1.0, y=0.0, z=0.07825))
+    block1.pose = Pose2D(x=1.0, y=1.0)
+    block2.pose = Pose2D(x=1.0, y=0.0)
     sim.state.add_block(block1)
     sim.state.add_block(block2)
     sim.load_gazebo_models()
