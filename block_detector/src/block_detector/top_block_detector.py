@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 
-from block_detector import BlockDetector, line_plane_intersection, \
+from block_detector_base import BlockDetector, line_plane_intersection, \
     create_block_marker
 
 import numpy as np
 
-from block_mover.msg import BlockObservation, BlockObservationArray
+from block_detector.msg import BlockObservation, BlockObservationArray
 
 # ROS imports
 import rospy
