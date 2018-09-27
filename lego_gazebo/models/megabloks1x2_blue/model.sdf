@@ -1,29 +1,29 @@
 <?xml version='1.0'?>
 <sdf version='1.4'> <!-- changed from 1.5 to be compatible with Gazebo2 -->
   <model name="megabloks1x2_blue">
-    <static>false</static> <!--for now, will remove when we need to learn controls for this-->
-    <link name="brick">
-      <pose>0 0 0.005  0 0 0</pose>
-      <inertial>
-          <inertia>
-            <ixx>0.01</ixx>
-            <ixy>0</ixy>
-            <ixz>0</ixz>
-            <iyy>0.01</iyy>
-            <iyz>0</iyz>
-            <izz>0.01</izz>
-          </inertia>
-          <mass>0.1</mass>
-          <pose> 0 0 0.005 0 0 0 </pose>
-      </inertial>
+    <static>false</static>
+    <link name="blok">
+      <pose>0 0 0 0 0 0</pose>
       <collision name="collision">
         <geometry>
-          <mesh>
-            <uri>model://megabloks1x2_blue/meshes/model.dae</uri>
-          </mesh>
+          <box>
+	  <size>0.062600000000000003 0.0313 0.0426</size>
+          </box>
         </geometry>
+	<surface>
+	  <friction>
+	    <ode>
+	      <mu>0.4</mu>
+	    </ode>
+	  </friction>
+	</surface>
       </collision>
+      <inertial>
+      <mass value="0.0060000000000000001"/>
+	<inertia ixx="0.00001" iyy="0.00001" izz="0.00001" />
+      </inertial>
       <visual name="visual">
+        <pose>0 0 -0.02 0 0 0</pose>
         <geometry>
           <mesh>
             <uri>model://megabloks1x2_blue/meshes/model.dae</uri>

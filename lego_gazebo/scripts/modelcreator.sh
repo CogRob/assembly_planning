@@ -12,9 +12,9 @@ function main_loop(){
   MTEMP=megabloks1x
   for num in 1 2 3
     do
-      for color in red blue green pink yellow
+      for color in '' _red _blue _green _pink _yellow
         do
-          MNAME=${MTEMP}${num}_${color}
+          MNAME=${MTEMP}${num}${color}
           cd $MNAME
           create_sdf ${num} ${color}
           cd ..
@@ -24,7 +24,7 @@ function main_loop(){
 }
 
 function create_models(){
-  MNAME=${MTEMP}${num}_${color}
+  MNAME=${MTEMP}${num}${color}
   mkdir -p $MNAME/meshes
   cd $MNAME
   create_config ${num} ${color}
@@ -36,7 +36,7 @@ function create_models(){
 function create_config(){
   echo "<?xml version=\"1.0\"?>
 <model>
-  <name>megabloks1x$1_$2</name>
+  <name>megabloks1x$1$2</name>
   <version>1.0</version>
   <sdf version='1.4'>model.sdf</sdf>
 
@@ -65,33 +65,33 @@ function create_config(){
 function create_sdf(){
   echo "<?xml version='1.0'?>
 <sdf version='1.4'> <!-- changed from 1.5 to be compatible with Gazebo2 -->
-  <model name=\"megabloks1x$1_$2\">
-    <static>false</static> <!--for now, will remove when we need to learn controls for this-->
-    <link name=\"brick\">
-      <pose>0 0 0.005  0 0 0</pose>
-      <inertial>
-          <inertia>
-            <ixx>0.01</ixx>
-            <ixy>0</ixy>
-            <ixz>0</ixz>
-            <iyy>0.01</iyy>
-            <iyz>0</iyz>
-            <izz>0.01</izz>
-          </inertia>
-          <mass>0.1</mass>
-          <pose> 0 0 0.005 0 0 0 </pose>
-      </inertial>
+  <model name=\"megabloks1x$1$2\">
+    <static>false</static>
+    <link name=\"blok\">
+      <pose>0 0 0 0 0 0</pose>
       <collision name=\"collision\">
         <geometry>
-          <mesh>
-            <uri>model://megabloks1x$1_$2/meshes/model.dae</uri>
-          </mesh>
+          <box>
+	  <size>$((0.0313*$1)) 0.0313 0.0426</size>
+          </box>
         </geometry>
+	<surface>
+	  <friction>
+	    <ode>
+	      <mu>0.4</mu>
+	    </ode>
+	  </friction>
+	</surface>
       </collision>
+      <inertial>
+      <mass value=\"$((0.003*$1))\"/>
+	<inertia ixx=\"0.00001\" iyy=\"0.00001\" izz=\"0.00001\" />
+      </inertial>
       <visual name=\"visual\">
+        <pose>0 0 -0.02 0 0 0</pose>
         <geometry>
           <mesh>
-            <uri>model://megabloks1x$1_$2/meshes/model.dae</uri>
+            <uri>model://megabloks1x$1$2/meshes/model.dae</uri>
           </mesh>
         </geometry>
       </visual>
