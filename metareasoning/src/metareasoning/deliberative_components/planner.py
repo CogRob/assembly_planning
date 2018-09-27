@@ -7,8 +7,8 @@ from Queue import PriorityQueue
 import networkx as nx
 import networkx.algorithms.isomorphism as iso
 from geometry_msgs.msg import Pose
-from metareasoning_agent.knowledge_base import (Block, Constraints, EnvState,
-                                                PrimitiveActions)
+from metareasoning.knowledge_base import (Block, Constraints, EnvState,
+                                          PrimitiveActions)
 
 
 class Learner(object):
@@ -105,8 +105,8 @@ class Learner(object):
         # therefore the comparison is a two-step process for xy and theta
         node_condition = iso.categorical_node_match(['length', 'width'],
                                                     [1, 1])
-        edge_condition1 = iso.numerical_edge_match(
-            ['delx', 'dely'], [0, 0], rtol=self._errortolerancexy)
+        edge_condition1 = iso.numerical_edge_match(['delx', 'dely'], [0, 0],
+                                                   rtol=self._errortolerancexy)
         edge_condition2 = iso.numerical_edge_match(
             ['deltheta'], [0], rtol=self._errortolerancetheta)
         result1 = nx.is_isomorphic(

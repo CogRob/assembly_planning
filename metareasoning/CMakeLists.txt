@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(metareasoning_agent)
+project(metareasoning)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 add_compile_options(-std=c++11)
@@ -114,7 +114,7 @@ catkin_python_setup()
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
   INCLUDE_DIRS include
-#  LIBRARIES metareasoning_agent
+#  LIBRARIES metareasoning
   CATKIN_DEPENDS gazebo_ros rospy roscpp std_msgs gazebo_msgs baxter_core_msgs baxter_interface baxter_tools
 #  DEPENDS system_lib
 )
@@ -145,7 +145,7 @@ include_directories(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-# add_executable(${PROJECT_NAME}_node src/metareasoning_agent_node.cpp)
+# add_executable(${PROJECT_NAME}_node src/metareasoning_node.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the

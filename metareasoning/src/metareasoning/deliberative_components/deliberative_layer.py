@@ -7,10 +7,10 @@ Date: 09/13/2018
 """
 
 from enum import Enum
-from metareasoning_agent.deliberative_components import Planner, Learner
+from metareasoning.deliberative_components import Planner, Learner
 import logging
 
-module_logger = logging.getLogger('metareasoning_agent.deliberative_layer')
+module_logger = logging.getLogger('metareasoning.deliberative_layer')
 
 
 class DelControl(Enum):
@@ -26,7 +26,7 @@ class DeliberativeLayer(object):
 
     def __init__(self, args):
         self._logger = logging.getLogger(
-            'metareasoning_agent.deliberative_layer.DLayer')
+            'metareasoning.deliberative_layer.DLayer')
         self._components = {}
         self._components[DelControl.PLAN] = Planner(True)
         self._components[DelControl.LEARN] = Learner(True)

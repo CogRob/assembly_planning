@@ -5,12 +5,11 @@ Borrowed parts from: RSDK Inverse Kinematics Pick and Place Example
 Creates an object of type Agent, initializes and tests various primitive
 action implementations
 """
-from metareasoning_agent import agent
-from metareasoning_agent import knowledge_base as kb
+from metareasoning import agent
+from metareasoning import knowledge_base as kb
 
 import rospy
 from geometry_msgs.msg import Point, Pose
-
 
 
 def main():
@@ -18,26 +17,26 @@ def main():
     rospy.init_node("block_mover_test", log_level=rospy.DEBUG)
 
     # TEST various primitive actions #
-    while(True):
+    while (True):
         rospy.loginfo("Moving to beginning pose...")
         # create an agent with the intent to control right arm
-        test_agent = agent.Agent('right')   #pylint: disable=C0103
+        test_agent = agent.Agent('right')  #pylint: disable=C0103
         test_agent.subscribe()
 
         # Transport block constraint
-        
- 
+
         transport_constraint = test_agent.get_current_pose()  # pylint: disable=C0103
 
         transport_constraint.position.x = .5
         transport_constraint.position.y = -.75
         transport_constraint.position.z = 0
-        test_agent.executor(kb.PrimitiveActions.transport, transport_constraint)
+        test_agent.executor(kb.PrimitiveActions.transport,
+                            transport_constraint)
 
         # Get pixel locations from perception module
         test_agent.update_block_locations()
 
-        inv_block_count = len(test_agent.inv_state)    
+        inv_block_count = len(test_agent.inv_state)
         print("There are ", inv_block_count, " blocks in view of top camera.")
 
         # Print out the blocks
@@ -45,7 +44,6 @@ def main():
         for block in test_agent.inv_state:
             print("Block ", i, ": ", str(block))
             i += 1
-
 
         block_num = input("Which block would you like to pick up?")
         chosen_block = test_agent.inv_state[block_num]
@@ -65,9 +63,9 @@ def main():
         transport_constraint.position.x = block_location.x
         transport_constraint.position.y = block_location.y
         transport_constraint.position.z = z_curr
-            
 
-        test_agent.executor(kb.PrimitiveActions.transport, transport_constraint)
+        test_agent.executor(kb.PrimitiveActions.transport,
+                            transport_constraint)
         #waiting = input("Waiting... press enter when ready")
         rospy.sleep(1)
 
@@ -78,50 +76,53 @@ def main():
         #    B
         #    B
         #    B
-        
-        rospy.loginfo("Aligning gripper with blocks major_axis.")
-        new_pose = test_agent.extern_align(block_color, block_length, block_width, "major")
 
-        
+        rospy.loginfo("Aligning gripper with blocks major_axis.")
+        new_pose = test_agent.extern_align(block_color, block_length,
+                                           block_width, "major")
+
         # Align gripper so that it is perpindicular to minor axis
         # _______
         # |     |
         #
         #   BBB
-        #   
+        #
         # rospy.loginfo("Aligning gripper with blocks minor axis.")
         # test_agent.extern_align(block_color, block_length, block_width, block_location.theta, "major")
 
         rospy.sleep(10)
-        
+
         transport_constraint = new_pose  # pylint: disable=C0103
 
-        while(z_curr >= -0.28):
+        while (z_curr >= -0.28):
             transport_constraint.position.z = z_curr
-            
+
             z_curr -= 0.04
 
-            test_agent.executor(kb.PrimitiveActions.transport, transport_constraint)
+            test_agent.executor(kb.PrimitiveActions.transport,
+                                transport_constraint)
 
         # Retrieve the current pose of end effector
         transport_constraint = test_agent.get_current_pose()
-        
+
         # test pick (grasp block)
         rospy.logdebug("testing %s...", kb.PrimitiveActions.pick)
         test_agent.executor(kb.PrimitiveActions.pick)
 
         rospy.sleep(1)
 
-        # Block should be in gripper now. Lift above the table 
+        # Block should be in gripper now. Lift above the table
         transport_constraint = test_agent.get_current_pose()
         transport_constraint.position.z = -.15
-        test_agent.executor(kb.PrimitiveActions.transport, transport_constraint)
+        test_agent.executor(kb.PrimitiveActions.transport,
+                            transport_constraint)
 
-        # Set it back down 
+        # Set it back down
         transport_constraint = test_agent.get_current_pose()
 
         transport_constraint.position.z = -0.28
-        test_agent.executor(kb.PrimitiveActions.transport, transport_constraint)
+        test_agent.executor(kb.PrimitiveActions.transport,
+                            transport_constraint)
 
         # test place (release block)
         rospy.logdebug("testing %s...", kb.PrimitiveActions.place)
@@ -129,11 +130,13 @@ def main():
 
         # Raise gripper back above the table
         transport_constraint.position.z = 0
-        test_agent.executor(kb.PrimitiveActions.transport, transport_constraint)
+        test_agent.executor(kb.PrimitiveActions.transport,
+                            transport_constraint)
 
         rospy.sleep(10)
 
         rospy.loginfo("Completed pick and place, starting loop again...")
+
 
 if __name__ == '__main__':
     main()

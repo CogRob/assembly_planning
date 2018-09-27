@@ -9,11 +9,11 @@ from Queue import PriorityQueue
 import networkx as nx
 import networkx.algorithms.isomorphism as iso
 from geometry_msgs.msg import Pose
-from metareasoning_agent.knowledge_base import (Block, Constraints, EnvState,
+from metareasoning.knowledge_base import (Block, Constraints, EnvState,
                                                 PrimitiveActions)
 
 MODULE_LOGGER = logging.getLogger(
-    'metareasoning_agent.deliberative_components')
+    'metareasoning.deliberative_components')
 
 
 def check_availability(plans, blocks):
@@ -160,7 +160,7 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
 
     def __init__(self, ):
         self._logger = logging.getLogger(
-            'metareasoning_agent.deliberative_components.Planner')
+            'metareasoning.deliberative_components.Planner')
         # database init
         self._task2mission_db = {}
         self._mission2method_db = {}

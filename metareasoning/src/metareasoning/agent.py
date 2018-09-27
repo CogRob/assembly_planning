@@ -21,8 +21,8 @@ import numpy as np
 
 from block_mover.msg import BlockObservationArray, BlockObservation, BlockPixelLocArray, BlockPixelLoc
 
-from metareasoning_agent.knowledge_base import Block, PrimitiveActions, EnvState
-from metareasoning_agent.utilities import calculate_pose_diff
+from metareasoning.knowledge_base import Block, PrimitiveActions, EnvState
+from metareasoning.utilities import calculate_pose_diff
 
 
 class Constraints(object):
@@ -184,8 +184,8 @@ class Agent(object):
             }.get(resp_seeds[0], 'None')
             if self._verbose:
                 print(
-                    "IK Solution SUCCESS - Valid Joint Solution Found from Seed Type: {0}".
-                    format((seed_str)))
+                    "IK Solution SUCCESS - Valid Joint Solution Found from Seed Type: {0}"
+                    .format((seed_str)))
             # Format solution into Limb API-compatible dictionary
             limb_joints = dict(
                 zip(resp.joints[0].name, resp.joints[0].position))
@@ -417,8 +417,8 @@ class Agent(object):
                         pixel_y_dist = pixel_center_y - pixel_loc.y
 
                         # Overall distance
-                        pixel_dist = math.sqrt(
-                            pixel_x_dist**2 + pixel_y_dist**2)
+                        pixel_dist = math.sqrt(pixel_x_dist**2 +
+                                               pixel_y_dist**2)
                         rospy.loginfo("Pixel distance is: %f", pixel_dist)
 
                         if (pixel_dist > 200):
@@ -619,10 +619,12 @@ class Agent(object):
         rospy.loginfo("Roll: %f Pitch: %f Yaw %f", ik_pose_euler[0],
                       ik_pose_euler[1], ik_pose_euler[2])
 
-        ik_pose.position.x = current_pose['position'].x + motion_dist * math.sin(
-            direction)  # + ik_pose_euler[2])
-        ik_pose.position.y = current_pose['position'].y - motion_dist * math.cos(
-            direction)  # + ik_pose_euler[2])
+        ik_pose.position.x = current_pose[
+            'position'].x + motion_dist * math.sin(
+                direction)  # + ik_pose_euler[2])
+        ik_pose.position.y = current_pose[
+            'position'].y - motion_dist * math.cos(
+                direction)  # + ik_pose_euler[2])
         ik_pose.position.z = height
 
         joint_angles = self.ik_request(ik_pose)
