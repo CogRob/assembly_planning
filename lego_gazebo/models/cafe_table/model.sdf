@@ -10,6 +10,13 @@
             <size>0.913 0.913 0.04</size>                                      
           </box>                                                               
         </geometry>                                                            
+	<surface>
+	  <friction>
+  	    <ode>
+	      <mu>0.4</mu>
+            </ode>
+          </friction>
+        </surface>
       </collision>                                                             
                                                                                
       <collision name="column">                                                
