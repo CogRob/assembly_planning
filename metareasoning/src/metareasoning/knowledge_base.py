@@ -47,7 +47,8 @@ class Block(object):
 
     def __eq__(self, other):
         if isinstance(other, Block):
-            return self.length == other.length and self.width == other.width and self.color == other.color
+            return self.length == other.length and \
+                    self.width == other.width and self.color == other.color
         else:
             raise NotImplementedError
 
@@ -75,7 +76,8 @@ class EnvState(object):
 
     Workspace Graph:
         Node - Blocks placed in the workspace
-        Edge - Spatial relationships between the blocks as they are placed
+        Edge - Delta-x, delta-y, delta-theta between all the nodes. The
+               relationships are of absolute float type.
 
     Inventory:
         {bId: [bType, bPose]}:  Dictionary of block IDs with corresponding
@@ -93,7 +95,7 @@ class EnvState(object):
         if (self.in_graph(block)):
             return
         else:
-            rospy.loginfo("Adding block %s to ws graph", block)
+            rospy.logdebug("Adding block %s to ws graph", block)
             self.ws_state.add_node(
                 self._block_cnt,
                 length=block.length,
@@ -122,10 +124,10 @@ class EnvState(object):
             node_block = node2block(node)
 
             if (node_block == block):
-                rospy.loginfo("%s is already in the graph!", block)
+                rospy.logdebug("%s is already in the graph!", block)
                 return True
 
-        rospy.loginfo("%s is not in the graph!", block)
+        rospy.logdebug("%s is not in the graph!", block)
         return False
 
     def _update_edges(self):
