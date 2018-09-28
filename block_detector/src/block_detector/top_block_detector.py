@@ -55,7 +55,7 @@ class TopBlockDetector(BlockDetector):
     def __init__(self, pub_rate):
         BlockDetector.__init__(self, resolution=(640, 480),
                                allowed_circle_center=(315, 255),
-                               allowed_circle_diameter=201,
+                               allowed_circle_diameter=190,
                                allowed_circle_thickness=220,
                                pub_rate=pub_rate)
 
