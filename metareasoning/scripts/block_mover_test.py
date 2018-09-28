@@ -36,17 +36,17 @@ def main():
         # Get pixel locations from perception module
         test_agent.update_block_locations()
 
-        inv_block_count = len(test_agent.inv_state)
+        inv_block_count = len(test_agent.inventory)
         print("There are ", inv_block_count, " blocks in view of top camera.")
 
         # Print out the blocks
         i = 0
-        for block in test_agent.inv_state:
+        for block in test_agent.inventory:
             print("Block ", i, ": ", str(block))
             i += 1
 
         block_num = input("Which block would you like to pick up?")
-        chosen_block = test_agent.inv_state[block_num]
+        chosen_block = test_agent.inventory[block_num]
 
         block_location = chosen_block.pose
         #response = input("Block location is " + str(block_location) + ". Is this reasonable?")

@@ -58,7 +58,7 @@ def expand_missions(missions):
 def print_blocks(state):
     """helper function to print inventory list of EnvState"""
     MODULE_LOGGER.debug('List of blocks:')
-    for (idx, block) in enumerate(state.inv_state):
+    for (idx, block) in enumerate(state.inventory):
         MODULE_LOGGER.debug('Block %d: %s', idx, str(block))
 
 
@@ -285,7 +285,7 @@ class Planner(object):  # pylint: disable=too-many-instance-attributes
             self._mission_plans = self._task2mission_db[self._task.name]
             if self._mission_plans is not None:
                 valid_plans = check_availability(self._mission_plans,
-                                                 self._state.inv_state)
+                                                 self._state.inventory)
                 # next we need to push the valid plans into a PriorityQueue
                 # such that more optimal (action-length wise) missions are
                 # explored first

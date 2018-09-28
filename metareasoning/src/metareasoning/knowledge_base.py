@@ -86,8 +86,8 @@ class EnvState(object):
 
     def __init__(self):
         self._block_cnt = 0
-        self.ws_state = nx.Graph()
-        self.inv_state = []
+        self.workspace = nx.Graph()
+        self.inventory = []
 
     def add_block(self, block):
         """Method to add a new block as a node to the EnvState graph"""
@@ -96,7 +96,7 @@ class EnvState(object):
             return
         else:
             rospy.logdebug("Adding block %s to ws graph", block)
-            self.ws_state.add_node(
+            self.workspace.add_node(
                 self._block_cnt,
                 length=block.length,
                 width=block.width,
@@ -108,19 +108,19 @@ class EnvState(object):
             self._block_cnt += 1
 
             # Check that the number of nodes has increased
-            if (self.ws_state.number_of_nodes() != self._block_cnt):
+            if (self.workspace.number_of_nodes() != self._block_cnt):
                 rospy.logerr("The node wasn't properly added. WTF?!?!")
             self._update_edges()
 
     def clear(self):
-        self.inv_state = []
-        self.ws_state.clear()
+        self.inventory = []
+        self.workspace.clear()
         self._block_cnt = 0
 
     def in_graph(self, block):
         # Checks if a block is already in the graph
-        for node_key in self.ws_state.nodes:
-            node = self.ws_state.nodes[node_key]
+        for node_key in self.workspace.nodes:
+            node = self.workspace.nodes[node_key]
             node_block = node2block(node)
 
             if (node_block == block):
@@ -132,7 +132,7 @@ class EnvState(object):
 
     def _update_edges(self):
         """Method to update edges to the latest block added"""
-        base_node = self.ws_state.nodes[self._block_cnt - 1]
+        base_node = self.workspace.nodes[self._block_cnt - 1]
 
         base_node_pose = Pose2D(
             x=base_node['pose_x'],
@@ -140,11 +140,11 @@ class EnvState(object):
             theta=base_node['pose_theta'])
         for idx in range(0, self._block_cnt - 1):
             target_node_pose = Pose2D(
-                x=self.ws_state.nodes[idx]['pose_x'],
-                y=self.ws_state.nodes[idx]['pose_y'],
-                theta=self.ws_state.nodes[idx]['pose_theta'])
+                x=self.workspace.nodes[idx]['pose_x'],
+                y=self.workspace.nodes[idx]['pose_y'],
+                theta=self.workspace.nodes[idx]['pose_theta'])
             pose_diff = calculate_pose_diff(base_node_pose, target_node_pose)
-            self.ws_state.add_edge(
+            self.workspace.add_edge(
                 self._block_cnt - 1,
                 idx,
                 del_x=pose_diff.x,
@@ -153,12 +153,12 @@ class EnvState(object):
 
     def print_graph(self):
         print("Nodes:")
-        for node_key in self.ws_state.nodes:
-            node = self.ws_state.nodes[node_key]
+        for node_key in self.workspace.nodes:
+            node = self.workspace.nodes[node_key]
             print(node)
         print("edges")
-        for edge_key in self.ws_state.edges:
-            print self.ws_state.edges[edge_key]
+        for edge_key in self.workspace.edges:
+            print self.workspace.edges[edge_key]
 
 
 class Task(object):

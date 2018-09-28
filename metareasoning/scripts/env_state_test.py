@@ -172,10 +172,10 @@ def main():
     errortolerancetheta = 0.087
 
     node_condition1 = iso.categorical_node_match(['length', 'width'], [1, 1])
-    node_condition2 = iso.numerical_edge_match(['pose_x', 'pose_y'], [0, 0],
-                                               rtol=errortolerancexy)
-    node_condition3 = iso.numerical_edge_match(['pose_theta'], [0],
-                                               rtol=errortolerancetheta)
+    node_condition2 = iso.numerical_edge_match(
+        ['pose_x', 'pose_y'], [0, 0], rtol=errortolerancexy)
+    node_condition3 = iso.numerical_edge_match(
+        ['pose_theta'], [0], rtol=errortolerancetheta)
 
     i = 0
     none_count = 0
@@ -205,16 +205,16 @@ def main():
     expectation.print_graph()
     test_agent.get_ws().print_graph()
     result1 = nx.is_isomorphic(
-        expectation.ws_state,
-        test_agent.get_ws().ws_state,
+        expectation.workspace,
+        test_agent.get_ws().workspace,
         node_match=node_condition1)
     result2 = nx.is_isomorphic(
-        expectation.ws_state,
-        test_agent.get_ws().ws_state,
+        expectation.workspace,
+        test_agent.get_ws().workspace,
         node_match=node_condition2)
     result3 = nx.is_isomorphic(
-        expectation.ws_state,
-        test_agent.get_ws().ws_state,
+        expectation.workspace,
+        test_agent.get_ws().workspace,
         node_match=node_condition3)
     result = result1 and result2 and result3
 

@@ -105,18 +105,18 @@ class Learner(object):
         # therefore the comparison is a two-step process for xy and theta
         node_condition = iso.categorical_node_match(['length', 'width'],
                                                     [1, 1])
-        edge_condition1 = iso.numerical_edge_match(['delx', 'dely'], [0, 0],
-                                                   rtol=self._errortolerancexy)
+        edge_condition1 = iso.numerical_edge_match(
+            ['delx', 'dely'], [0, 0], rtol=self._errortolerancexy)
         edge_condition2 = iso.numerical_edge_match(
             ['deltheta'], [0], rtol=self._errortolerancetheta)
         result1 = nx.is_isomorphic(
-            self._expectation.ws_state,
-            self._blocks.ws_state,
+            self._expectation.workspace,
+            self._blocks.workspace,
             edge_match=edge_condition1,
             node_match=node_condition)
         result2 = nx.is_isomorphic(
-            self._expectation.ws_state,
-            self._blocks.ws_state,
+            self._expectation.workspace,
+            self._blocks.workspace,
             edge_match=edge_condition2,
             node_match=node_condition)
         result = result1 and result2

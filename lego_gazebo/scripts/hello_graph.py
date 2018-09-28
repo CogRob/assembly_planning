@@ -60,7 +60,7 @@ class GazeboSimulator(object):
         # Load Blocks SDF as described in the EnvState graph
         block_reference_frame = 'world'
         self.block_num = 0
-        for node, data in self.state.ws_state.nodes(data=True):
+        for node, data in self.state.workspace.nodes(data=True):
             block_xml = ''
             # read the block model SDF
             with open(model_path + self._model_dict[str(data['length']) + 'x' +

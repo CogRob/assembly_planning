@@ -233,7 +233,7 @@ class Agent(object):
             # Find the location of the block to move towards
 
             while (overhead_pose == Pose()):
-                for block_loc in self.inv_state:
+                for block_loc in self.inventory:
                     rospy.loginfo("Checking block: %dx%d %s", block_loc.width,
                                   block_loc.length, block_loc.color)
                     # Requested block should have same color, width and length
@@ -417,8 +417,8 @@ class Agent(object):
                         pixel_y_dist = pixel_center_y - pixel_loc.y
 
                         # Overall distance
-                        pixel_dist = math.sqrt(pixel_x_dist**2 +
-                                               pixel_y_dist**2)
+                        pixel_dist = math.sqrt(
+                            pixel_x_dist**2 + pixel_y_dist**2)
                         rospy.loginfo("Pixel distance is: %f", pixel_dist)
 
                         if (pixel_dist > 200):
@@ -518,8 +518,8 @@ class Agent(object):
             self._ws.add_block(new_block)
             ws_block_locations.append(new_block)
 
-        self.inv_state = inv_block_locations
-        self.ws_state = ws_block_locations
+        self.inventory = inv_block_locations
+        self.workspace = ws_block_locations
 
     def _rotate_gripper(self, angle):
         # NOTE: angle in radians!
@@ -619,12 +619,10 @@ class Agent(object):
         rospy.loginfo("Roll: %f Pitch: %f Yaw %f", ik_pose_euler[0],
                       ik_pose_euler[1], ik_pose_euler[2])
 
-        ik_pose.position.x = current_pose[
-            'position'].x + motion_dist * math.sin(
-                direction)  # + ik_pose_euler[2])
-        ik_pose.position.y = current_pose[
-            'position'].y - motion_dist * math.cos(
-                direction)  # + ik_pose_euler[2])
+        ik_pose.position.x = current_pose['position'].x + motion_dist * math.sin(
+            direction)  # + ik_pose_euler[2])
+        ik_pose.position.y = current_pose['position'].y - motion_dist * math.cos(
+            direction)  # + ik_pose_euler[2])
         ik_pose.position.z = height
 
         joint_angles = self.ik_request(ik_pose)
