@@ -108,7 +108,7 @@ class EnvState(object):
             # Check that the number of nodes has increased
             if (self.ws_state.number_of_nodes() != self._block_cnt):
                 rospy.logerr("The node wasn't properly added. WTF?!?!")
-            # self._update_edges()
+            self._update_edges()
 
     def clear(self):
         self.inv_state = []
@@ -132,13 +132,15 @@ class EnvState(object):
         """Method to update edges to the latest block added"""
         base_node = self.ws_state.nodes[self._block_cnt - 1]
 
-        base_node_pose_x = base_node['pose_x']
-        base_node_pose_y = base_node['pose_y']
-        base_node_pose_theta = base_node['pose_theta']
+        base_node_pose = Pose2D(
+            x=base_node['pose_x'],
+            y=base_node['pose_y'],
+            theta=base_node['pose_theta'])
         for idx in range(0, self._block_cnt - 1):
-            target_node_pose_x = self.ws_state.nodes[idx]['pose_x']
-            target_node_pose_y = self.ws_state.nodes[idx]['pose_y']
-            target_node_pose_theta = self.ws_state.nodes[idx]['pose_theta']
+            target_node_pose = Pose2D(
+                x=self.ws_state.nodes[idx]['pose_x'],
+                y=self.ws_state.nodes[idx]['pose_y'],
+                theta=self.ws_state.nodes[idx]['pose_theta'])
             pose_diff = calculate_pose_diff(base_node_pose, target_node_pose)
             self.ws_state.add_edge(
                 self._block_cnt - 1,
