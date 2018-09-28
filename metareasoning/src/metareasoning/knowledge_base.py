@@ -7,7 +7,22 @@ from enum import Enum
 import networkx as nx
 from geometry_msgs.msg import Pose, Pose2D
 import rospy
-from .utilities import calculate_pose_diff
+from metareasoning.utilities import calculate_pose_diff
+
+
+def node2block(env_state_node):
+    """
+    Helper function which converts EnvState's ws-graph node to Block type
+    """
+
+    return Block(
+        env_state_node['length'],
+        env_state_node['width'],
+        env_state_node['color'],
+        pose=Pose2D(
+            x=env_state_node['pose_x'],
+            y=env_state_node['pose_y'],
+            theta=env_state_node['pose_theta']))
 
 
 # Enum for fixed primitive actions
@@ -104,14 +119,7 @@ class EnvState(object):
         # Checks if a block is already in the graph
         for node_key in self.ws_state.nodes:
             node = self.ws_state.nodes[node_key]
-            node_block = Block(
-                length=node['length'],
-                width=node['width'],
-                color=node['color'],
-                pose=Pose2D(
-                    x=node['pose_x'],
-                    y=node['pose_y'],
-                    theta=node['pose_theta']))
+            node_block = node2block(node)
 
             if (node_block == block):
                 rospy.loginfo("%s is already in the graph!", block)
