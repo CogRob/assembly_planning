@@ -11,6 +11,8 @@ import pickle as pkl
 import rospy
 import networkx as nx
 from metareasoning.knowledge_base import EnvState, Block
+from metareasoning.planner import DeltaPlanner
+from metareasoning.agent import Agent
 from block_detector.msg import BlockObservationArray
 
 from baxter_interface import (
@@ -37,20 +39,40 @@ class RecordAndExecute(object):
         @type lights: bool
         @param lights: if lights should be activated
         """
-        self._arm = arm
         # control input and output
+        self._agent = Agent(arm)
+        self._agent.subscribe()
         self._nav = Navigator('%s' % (arm, ))
+        self._planner = DeltaPlanner()
+
         # state
         self._mode = mode
         self._num_states = 0
         self._curr_env_state = EnvState()
         self.state_list = []
-        self._task_expectation = None
-        self._task_loaded = False
+        self._task_expectation = []
+        self._task_loaded = False  # if expectations are loaded
+        self._task_saved = False  # if loaded expectations are saved
+        self._execution = False  # whether loaded task is executed or not
+
         # state input and output
         rospy.Subscriber('/block_detector/top/block_obs',
                          BlockObservationArray, self.get_state)
+
+        # read stored expectations
+        try:
+            with open('a_expectation.pkl', 'rb') as f:
+                self._task_expectation = pkl.load(f)
+            rospy.loginfo("Found the expectation file")
+            self.state_list = self._task_expectation
+            for state in self.state_list:
+                print str(state)
+            self.set_mode(RobotModes.execute)
+            self._task_loaded = True
+        except IOError:
+            rospy.loginfo("Expectations not found. Please help the robot!")
         rospy.loginfo("Robot started in %s mode", self._mode)
+        self._switch_mode_lights()
 
     def _switch_mode_lights(self):
         if self._mode == RobotModes.learn:
@@ -70,21 +92,22 @@ class RecordAndExecute(object):
             self._switch_mode_lights()
             rospy.logdebug(self._mode)
             rospy.sleep(1.0)
-        # manage capture state
-        if self._mode == RobotModes.learn and self._nav.button0 == 1:
-            rospy.logdebug("capture state")
-            self.save_state()
-            rospy.sleep(1.0)
+        # manage learn mode
+        if self._mode == RobotModes.learn:
+            if self._nav.button0 == 1:
+                rospy.loginfo("capture state")
+                self.save_state()
+                rospy.sleep(1.0)
         # manage execution mode
-        if self._mode == RobotModes.execute and not self._task_loaded:
-            rospy.loginfo("Saving expectations")
-            with open('a_expectation.pkl', 'w') as f:
-                pkl.dump(self._task_expectation, f)
-            # TODO pickle the expectation
-        else:
-            rospy.loginfo("Executing learnt task")
-            # TODO get plan for current milestone
-            # execute
+        if self._mode == RobotModes.execute:
+            if not self._task_loaded and not self._task_saved:
+                rospy.loginfo("Saving expectations")
+                with open('a_expectation.pkl', 'wb') as f:
+                    pkl.dump(self._task_expectation, f)
+                self._task_saved = True
+                self._task_loaded = True
+            elif self._task_loaded and not self._execution:
+                self.execute()
         # manage end of rosnode
         if self._nav.button1 == 1:
             rospy.signal_shutdown("End of Demo")
@@ -100,7 +123,7 @@ class RecordAndExecute(object):
         for block_obs in data.inv_obs:
             block = Block(block_obs.length, block_obs.width, block_obs.color,
                           block_obs.pose)
-            self._curr_env_state.inv_state.append(block)
+            self._curr_env_state.inventory.append(block)
             count += 1
         for block_obs in data.ws_obs:
             block = Block(block_obs.length, block_obs.width, block_obs.color,
@@ -116,8 +139,8 @@ class RecordAndExecute(object):
         self._task_expectation.append(state_snapshot)
         self._num_states += 1
         nx.draw(
-            state_snapshot.ws_state,
-            pos=nx.spring_layout(state_snapshot.ws_state))
+            state_snapshot.workspace,
+            pos=nx.spring_layout(state_snapshot.workspace))
         plt.savefig('new_fig' + str(self._num_states) + '.jpeg')
         plt.clf()
         rospy.logdebug("EnvState saved. Block #: %d",
@@ -132,22 +155,24 @@ class RecordAndExecute(object):
         self._task_expectation = expectations
         self._task_loaded = True
 
+    def execute(self):
+        rospy.loginfo("Preparing to execute the hard-coded task")
+        self._planner.setup_hard_coded_plan('||')
+        action_plan = self._planner.get_hard_coded_plan()
+        while action_plan is not None:
+            for action, constraint in action_plan:
+                print str(action) + ', ' + str(constraint)
+                self._agent.executor(action, constraint)
+            action_plan = self._planner.get_hard_coded_plan()
+        rospy.loginfo("Done executing the plan")
+        self._agent.move_to_start()
+        self._execution = True
+
 
 def main():
-    rospy.init_node('record_and_execute', disable_signals=True)
+    rospy.init_node('record_and_execute')
     rexec = RecordAndExecute('right')
     rospy.on_shutdown(rexec.exit)
-    expectations = None
-    # read stored expectations
-    try:
-        with open('a_expectation.pkl', 'r') as f:
-            expectations = pkl.load(f)
-        rospy.loginfo("Found the expectation file")
-        rexec.state_list = expectations
-        rexec.set_expectation(expectations)
-        rexec.set_mode(RobotModes.execute)
-    except IOError:
-        rospy.loginfo("Expectations not found. Please help the robot!")
     while not rospy.is_shutdown():
         rexec.next_cycle()
 
