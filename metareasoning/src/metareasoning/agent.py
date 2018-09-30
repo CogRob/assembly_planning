@@ -88,13 +88,21 @@ class Agent(object):
             position=self._start_position,
             orientation=self._overhead_orientation)
 
-        self._start_angles = self.ik_request(self._start_pose)
+        self._start_angles = {
+            'right_e0': -0.20632041597058814,
+            'right_e1': 1.5412671966278695,
+            'right_s0': 0.35204859081970247,
+            'right_s1': -0.9376457565949592,
+            'right_w0': 0.16643691548556738,
+            'right_w1': 0.941864203761644,
+            'right_w2': -0.11926700625809092
+        }
 
         # Meta-reasoning level information
         self._actuation_results = True
 
         # move to starting position
-        self.move_to_start(self._start_angles)
+        self.move_to_start()
 
         self.curr_pose = None
         self.pixel_locs = []
@@ -121,14 +129,11 @@ class Agent(object):
         return block_pixel_locs
 
     # BAXTER-specific methods
-    def move_to_start(self, start_angles=None):
+    def move_to_start(self):
         """Move to start_angles joint configuration before task execution"""
 
         rospy.logdebug("Moving the %s arm to start pose...", self._limb_name)
-        if not start_angles:
-            start_angles = dict(
-                zip(self._limb._joint_names[self._limb_name], [0] * 7))  # pylint: disable=W0212
-        self._guarded_move_to_joint_position(start_angles)
+        self._guarded_move_to_joint_position(self._start_angles)
         self._gripper_open()
         rospy.sleep(1.0)
         print("Running. Ctrl-c to quit")
@@ -200,6 +205,8 @@ class Agent(object):
     def _transport(self, block=None, position=None, orientation=None):
         overhead_pose = Pose()
 
+        rospy.loginfo("%s %s %s", str(block), str(position), str(orientation))
+
         if (block is not None and position is None):
             rospy.loginfo(
                 "Finding the correct block to transport to above. Looking for a %dx%d %s block",
@@ -208,13 +215,11 @@ class Agent(object):
             # Find the location of the block to move towards
 
             while (overhead_pose == Pose()):
-                for block_loc in self.inventory:
+                for block_loc in self._inventory:
                     rospy.loginfo("Checking block: %dx%d %s", block_loc.width,
                                   block_loc.length, block_loc.color)
                     # Requested block should have same color, width and length
-                    if (block_loc.color == block.color
-                            and block_loc.width == block.width
-                            and block_loc.length == block.length):
+                    if (block_loc == block):
                         print("Location to go to is %f %f", block_loc.pose.x,
                               block_loc.pose.y)
                         overhead_pose.position = Point(
@@ -227,7 +232,8 @@ class Agent(object):
 
         elif (position is not None and block is None):
 
-            overhead_pose.position = position
+            overhead_pose.position.x = position.x
+            overhead_pose.position.y = position.y
             overhead_pose.orientation = self._overhead_orientation
 
         else:
@@ -459,6 +465,9 @@ class Agent(object):
         self._gripper_open()
 
     def _detect(self):  # , orientation):
+        # move to start position so that top camera can look at the table
+        self.move_to_start()
+
         rospy.loginfo(
             "Updating block locations. Waiting for BlockObservationArray...")
 
@@ -493,8 +502,8 @@ class Agent(object):
             self._ws.add_block(new_block)
             ws_block_locations.append(new_block)
 
-        self.inventory = inv_block_locations
-        self.workspace = ws_block_locations
+        self._inventory = inv_block_locations
+        self._workspace = ws_block_locations
 
     def _rotate_gripper(self, angle):
         # NOTE: angle in radians!
@@ -622,10 +631,11 @@ class Agent(object):
                 # We want to move above a block
                 if constraints.is_block_constraint():
                     rospy.loginfo("Constraint is a block constraint")
-                    # TODO: need a way to distinguish between whether the block
-                    # that the gripper is to be transported to is in INV or WS
-                    # NOTE: I don't think a block will ever get _transport called
-                    # on it if unless it is in the invent
+                    # TODO: need a way to distinguish between whether the
+                    # block that the gripper is to be transported to is in
+                    # INV or WS
+                    # NOTE: I don't think a block will ever get _transport
+                    # called on it if unless it is in the invent
 
                     self._actions[action](constraints.block, None)
                 elif (constraints.is_position_constraint()):
@@ -641,7 +651,7 @@ class Agent(object):
                     # We have a block that we wish to align with
                     self._actions[action](orientation_constraint,
                                           block_constraint)
-                elif (constraints.is_orientation_constraints()):
+                elif (constraints.is_position_constraint()):
                     block_constraint = constraints.block
                     orientation_constraint = constraints.orientation
                     self._actions[action](orientation_constraint,
