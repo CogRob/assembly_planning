@@ -19,35 +19,10 @@ import tf
 import math
 import numpy as np
 
-from block_mover.msg import BlockObservationArray, BlockObservation, BlockPixelLocArray, BlockPixelLoc
+from block_detector.msg import BlockObservationArray, BlockObservation, BlockPixelLocArray, BlockPixelLoc
 
-from metareasoning.knowledge_base import Block, PrimitiveActions, EnvState
+from metareasoning.knowledge_base import Block, Constraint, PrimitiveActions, EnvState
 from metareasoning.utilities import calculate_pose_diff
-
-
-class Constraints(object):
-    def __init__(self, block=None, position=None, orientation=None):
-        self.block = block
-        self.position = position
-        self.orientation = orientation
-
-        if ((self.block is not None and self.orientation is None)
-                or (self.position is not None and self.orientation is None)
-                or (self.position is not None and self.block is not None)):
-            rospy.logerr(
-                "The constraint you are attempting to make is not valid")
-
-    def is_block_constraints(self):
-        return (self.block is not None) and (self.orientation is not None)
-
-    def is_position_constraints(self):
-        return (self.position is not None) and (self.orientation is not None)
-
-    def is_empty_constraints(self):
-        return self.block is None and self.position is None and self.orientation is None
-
-    def is_orientation_constraints(self):
-        return self.block is None and self.position is None and self.orientation is not None
 
 
 class Agent(object):
@@ -631,21 +606,21 @@ class Agent(object):
         return ik_pose
 
     # PLANNING interface
-    def executor(self, action, constraints=Constraints()):
+    def executor(self, action, constraints=Constraint()):
         """Executor: Interfaces with planner, receives action and actuates Baxter"""
         # if the action does not require constraint, check constraint == None
         if action is PrimitiveActions.pick or \
                 action is PrimitiveActions.place or \
                 action is PrimitiveActions.retract or \
                 action is PrimitiveActions.detect:
-            if not constraints.is_empty_constraints():
+            if not constraints.is_empty_constraint():
                 rospy.logerr("%s should not be passed any arguments", action)
             else:
                 self._actions[action]()
         else:
             if action == PrimitiveActions.transport:
                 # We want to move above a block
-                if constraints.is_block_constraints():
+                if constraints.is_block_constraint():
                     rospy.loginfo("Constraint is a block constraint")
                     # TODO: need a way to distinguish between whether the block
                     # that the gripper is to be transported to is in INV or WS
@@ -653,14 +628,14 @@ class Agent(object):
                     # on it if unless it is in the invent
 
                     self._actions[action](constraints.block, None)
-                elif (constraints.is_position_constraints()):
+                elif (constraints.is_position_constraint()):
                     rospy.loginfo("Constraint is a position constraint")
                     pose_constraint = constraints.position
                     self._actions[action](None, pose_constraint)
                 else:
                     rospy.logerr("%s must be passed arguments", action)
             elif action == PrimitiveActions.align:
-                if (constraints.is_block_constraints()):
+                if (constraints.is_block_constraint()):
                     block_constraint = constraints.block
                     orientation_constraint = constraints.orientation
                     # We have a block that we wish to align with

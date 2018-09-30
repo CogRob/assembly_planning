@@ -18,14 +18,14 @@ def generate_pick_and_place(block, location, pick_orientation,
     return [
         {
             'action': kb.PrimitiveActions.detect,
-            'constraints': agent.Constraints(),
+            'constraints': agent.Constraint(),
             'desc': "Detecting block locations with top camera"
         },
         {
             'action':
             kb.PrimitiveActions.transport,
             'constraints':
-            agent.Constraints(
+            agent.Constraint(
                 block=block, position=None, orientation=pick_orientation),
             'desc':
             "Moving towards " + str(block),
@@ -34,7 +34,7 @@ def generate_pick_and_place(block, location, pick_orientation,
             'action':
             kb.PrimitiveActions.align,
             'constraints':
-            agent.Constraints(
+            agent.Constraint(
                 block=block, position=None, orientation=pick_orientation),
             'desc':
             "Aligning with " + str(block) + " with orientation " +
@@ -42,19 +42,19 @@ def generate_pick_and_place(block, location, pick_orientation,
         },
         {
             'action': kb.PrimitiveActions.pick,
-            'constraints': agent.Constraints(),
+            'constraints': agent.Constraint(),
             'desc': "Picking " + str(block),
         },
         {
             'action': kb.PrimitiveActions.retract,
-            'constraints': agent.Constraints(),
+            'constraints': agent.Constraint(),
             'desc': "Retracting..."
         },
         {
             'action':
             kb.PrimitiveActions.transport,
             'constraints':
-            agent.Constraints(
+            agent.Constraint(
                 block=None, position=location, orientation=place_orientation),
             'desc':
             "Moving " + str(block) + " to " + str(location)
@@ -63,7 +63,7 @@ def generate_pick_and_place(block, location, pick_orientation,
             'action':
             kb.PrimitiveActions.align,
             'constraints':
-            agent.Constraints(
+            agent.Constraint(
                 block=None, position=None, orientation=place_orientation),
             'desc':
             "Aligning " + str(block) + "with orientation " +
@@ -71,19 +71,19 @@ def generate_pick_and_place(block, location, pick_orientation,
         },
         {
             'action': kb.PrimitiveActions.place,
-            'constraints': agent.Constraints(),
+            'constraints': agent.Constraint(),
             'desc': "Placing " + str(block)
         },
         {
             'action': kb.PrimitiveActions.retract,
-            'constraints': agent.Constraints(),
+            'constraints': agent.Constraint(),
             'desc': "Retracting...",
         },
         {
             'action':
             kb.PrimitiveActions.transport,
             'constraints':
-            agent.Constraints(
+            agent.Constraint(
                 block=None, position=resting_position, orientation=0),
             'desc':
             "Moving back to starting pose",

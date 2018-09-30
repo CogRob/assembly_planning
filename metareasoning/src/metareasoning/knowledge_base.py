@@ -25,6 +25,12 @@ def node2block(env_state_node):
             theta=env_state_node['pose_theta']))
 
 
+# Enum for methods
+class NonPrimitiveActions(Enum):
+    acquire = 'ACQUIRE'
+    deposit = 'DEPOSIT'
+
+
 # Enum for fixed primitive actions
 class PrimitiveActions(Enum):
     """Object for communicating planned actions to the agent"""
@@ -57,18 +63,40 @@ class Block(object):
             self.length) + str(self.pose)
 
 
-class Constraints(object):
+class Constraint(object):
     def __init__(self, block=None, position=None, orientation=None, grip=None):
         self.position = position
         self.block = block
         self.orientation = orientation
         self.grip = grip
 
-    def is_Block(self):
-        """checking for kind of constraint"""
-        if self.block is not None:
-            return True
-        return False
+        if ((self.block is not None and self.orientation is None)
+                or (self.position is not None and self.orientation is None)
+                or (self.position is not None and self.block is not None)):
+            rospy.logerr(
+                "The constraint you are attempting to make is not valid")
+
+    def set_block(self, block):
+        self.block = block
+
+    def set_pose(self, pose, orientation):
+        self.position = pose
+        self.orientation = orientation
+
+    def set_grip(self, grip=0):
+        self.grip = grip
+
+    def is_block_constraint(self):
+        return (self.block is not None) and (self.orientation is not None)
+
+    def is_position_constraint(self):
+        return (self.position is not None) and (self.orientation is not None)
+
+    def is_empty_constraint(self):
+        return self.block is None and self.position is None and self.orientation is None
+
+    def is_orientation_constraint(self):
+        return self.block is None and self.position is None and self.orientation is not None
 
 
 class EnvState(object):
