@@ -7,22 +7,28 @@ import sys
 import matplotlib.pyplot as plt
 from enum import Enum
 import pickle as pkl
+import threading
+import copy
 
 import rospy
+from rospkg import RosPack
 import networkx as nx
 from metareasoning.knowledge_base import EnvState, Block
 from metareasoning.planner import DeltaPlanner
 from metareasoning.agent import Agent
+from metareasoning.baxter_scripts import JointRecorder
 from block_detector.msg import BlockObservationArray
 
 from baxter_interface import (
-    Navigator, )
+    DigitalIO,
+    Navigator,
+)
 
 
 class RobotModes(Enum):
     learn = 'LEARN'
     execute = 'EXECUTE'
-    think = 'THINK'
+    teach = 'TEACH'
 
 
 class RecordAndExecute(object):
@@ -44,6 +50,11 @@ class RecordAndExecute(object):
         self._agent.subscribe()
         self._nav = Navigator('%s' % (arm, ))
         self._planner = DeltaPlanner()
+        self._teach_button = DigitalIO('%s_upper_button' % (arm, ))  # dash
+        # record right arm, ignore gripper states, save to 'trajectory' file
+        # at 10 Hz
+        self._recorder = JointRecorder(
+            arm='right', mode='end', filename='trajectory', rate=10)
 
         # state
         self._mode = mode
@@ -51,26 +62,43 @@ class RecordAndExecute(object):
         self._curr_env_state = EnvState()
         self.state_list = []
         self._task_expectation = []
+        self._adapted_plan = []
         self._task_loaded = False  # if expectations are loaded
         self._task_saved = False  # if loaded expectations are saved
         self._execution = False  # whether loaded task is executed or not
+        self._plan_loaded = False
+        self._teach_start = False
+        self._teach_done = False
 
         # state input and output
         rospy.Subscriber('/block_detector/top/block_obs',
                          BlockObservationArray, self.get_state)
+        self._teach_button.state_changed.connect(self.teach_routine)
 
+        # uncomment if any files need to be read
+        # rp = RosPack()
+        # path = rp.get_path('metareasoning')
         # read stored expectations
-        try:
-            with open('a_expectation.pkl', 'rb') as f:
-                self._task_expectation = pkl.load(f)
-            rospy.loginfo("Found the expectation file")
-            self.state_list = self._task_expectation
-            for state in self.state_list:
-                print str(state)
-            self.set_mode(RobotModes.execute)
-            self._task_loaded = True
-        except IOError:
-            rospy.loginfo("Expectations not found. Please help the robot!")
+        # try:
+        #     with open(path + '/data/a_expectation.pkl', 'rb') as f:
+        #         self._task_expectation = pkl.load(f)
+        #     rospy.loginfo("Found the expectation file")
+        #     self.state_list = self._task_expectation
+        #     for state in self.state_list:
+        #         print str(state)
+        #     self.set_mode(RobotModes.execute)
+        #     self._task_loaded = True
+        # except IOError:
+        #     rospy.loginfo("Expectations not found. Please help the robot!")
+        # read adapted plan
+        # try:
+        #     with open(path + '/data/adapted_plan.pkl', 'rb') as f:
+        #         self._adapted_plan = pkl.load(f)
+        #     rospy.loginfo("Found the adapted plan")
+        #     self.set_mode(RobotModes.execute)
+        #     self._plan_loaded = True
+        # except IOError:
+        #     rospy.loginfo("Expectations not found. Please help the robot!")
         rospy.loginfo("Robot started in %s mode", self._mode)
         self._switch_mode_lights()
 
@@ -80,6 +108,9 @@ class RecordAndExecute(object):
             self._nav.outer_led = False
         elif self._mode == RobotModes.execute:
             self._nav.inner_led = False
+            self._nav.outer_led = True
+        elif self._mode == RobotModes.teach:
+            self._nav.inner_led = True
             self._nav.outer_led = True
 
     def next_cycle(self):
@@ -95,19 +126,32 @@ class RecordAndExecute(object):
         # manage learn mode
         if self._mode == RobotModes.learn:
             if self._nav.button0 == 1:
+                self._task_loaded = True
                 rospy.loginfo("capture state")
                 self.save_state()
                 rospy.sleep(1.0)
         # manage execution mode
         if self._mode == RobotModes.execute:
-            if not self._task_loaded and not self._task_saved:
+            if self._plan_loaded:
+                rospy.loginfo("executing the plan")
+                for i in range(len(self._adapted_plan.plan.points)):
+                    point = dict(
+                        zip(self._agent._limb.joint_names(),
+                            self._adapted_plan.plan.points[i].positions))
+                    rospy.loginfo(point)
+                    self._agent._limb.move_to_joint_positions(point)
+                    rospy.sleep(0.5)
+                rospy.loginfo("done executing")
+                self._plan_loaded = False
+            if self._task_loaded and not self._task_saved:
                 rospy.loginfo("Saving expectations")
                 with open('a_expectation.pkl', 'wb') as f:
                     pkl.dump(self._task_expectation, f)
                 self._task_saved = True
-                self._task_loaded = True
-            elif self._task_loaded and not self._execution:
+            if self._task_loaded and not self._execution:
                 self.execute()
+        if self._mode == RobotModes.teach:
+            pass
         # manage end of rosnode
         if self._nav.button1 == 1:
             rospy.signal_shutdown("End of Demo")
@@ -134,13 +178,11 @@ class RecordAndExecute(object):
         rospy.logdebug("EnvState updated. Block #: %d", count)
 
     def save_state(self):
-        state_snapshot = self._curr_env_state
+        state_snapshot = copy.deepcopy(self._curr_env_state)
         self.state_list.append(state_snapshot)
         self._task_expectation.append(state_snapshot)
         self._num_states += 1
-        nx.draw(
-            state_snapshot.workspace,
-            pos=nx.spring_layout(state_snapshot.workspace))
+        nx.draw(state_snapshot.workspace)
         plt.savefig('new_fig' + str(self._num_states) + '.jpeg')
         plt.clf()
         rospy.logdebug("EnvState saved. Block #: %d",
@@ -156,17 +198,46 @@ class RecordAndExecute(object):
         self._task_loaded = True
 
     def execute(self):
-        rospy.loginfo("Preparing to execute the hard-coded task")
-        self._planner.setup_hard_coded_plan('||')
-        action_plan = self._planner.get_hard_coded_plan()
-        while action_plan is not None:
-            for action, constraint in action_plan:
-                print str(action) + ', ' + str(constraint)
-                self._agent.executor(action, constraint)
+        debug = False
+        if debug:
+            rospy.loginfo("Preparing to execute the hard-coded task")
+            self._planner.setup_hard_coded_plan('A')
             action_plan = self._planner.get_hard_coded_plan()
+            while action_plan is not None:
+                for action, constraint in action_plan:
+                    print str(action) + ', ' + str(constraint)
+                    self._agent.executor(action, constraint)
+                action_plan = self._planner.get_hard_coded_plan()
+        else:
+            rospy.loginfo("Executing demonstrated task")
+            ptr = 0
+            while ptr < len(self.state_list) - 1:
+                action_plan = self._planner.plan(self.state_list[ptr],
+                                                 self.state_list[ptr + 1])
+                for action, constraint in action_plan:
+                    rospy.loginfo("%s, %s", str(action), str(constraint))
+                    self._agent.executor(action, constraint)
+                ptr += 1
         rospy.loginfo("Done executing the plan")
         self._agent.move_to_start()
         self._execution = True
+
+    def teach_routine(self, value):
+        """
+        Record the trajectory taught by human user
+        """
+        self.set_mode(RobotModes.teach)
+        if not self._teach_start:
+            self._teach_start = True
+            self._teach_done = False
+        elif self._teach_start and not self._teach_done:
+            self._teach_start = False
+            self._teach_done = True
+            self._recorder.stop()
+        if self._teach_start:
+            process = threading.Thread(target=self._recorder.record)
+            process.daemon = True
+            process.start()
 
 
 def main():
