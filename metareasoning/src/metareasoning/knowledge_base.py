@@ -14,7 +14,6 @@ def node2block(env_state_node):
     """
     Helper function which converts EnvState's ws-graph node to Block type
     """
-
     return Block(
         env_state_node['length'],
         env_state_node['width'],
@@ -75,6 +74,18 @@ class Constraint(object):
                 or (self.position is not None and self.block is not None)):
             rospy.logerr(
                 "The constraint you are attempting to make is not valid")
+
+    def __str__(self):
+        constraint_type = ['block', 'position', 'empty']
+        constraint_check = [
+            self.is_block_constraint, self.is_position_constraint,
+            self.is_empty_constraint
+        ]
+        constraint_value = [str(self.block), str(self.position), 'None']
+        for i in range(3):
+            if constraint_check[i]():
+                return ("Constraint type: " + constraint_type[i] +
+                        ", value: " + constraint_value[i])
 
     def set_block(self, block):
         self.block = block
