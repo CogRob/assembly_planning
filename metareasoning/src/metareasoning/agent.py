@@ -107,6 +107,13 @@ class Agent(object):
         self.curr_pose = None
         self.pixel_locs = []
 
+        # check gripper
+        if self._gripper.error():
+            self._gripper.reset()
+        if (not self._gripper.calibrated()
+                and self._gripper.type() != 'custom'):
+            self._gripper.calibrate()
+
     def subscribe(self):
         hand_cam_pix_sub = rospy.Subscriber(
             "/block_detector/hand/block_pixel_locs", BlockPixelLocArray,
@@ -553,7 +560,7 @@ class Agent(object):
                 self._hover_distance, curr_z)
 
         while (curr_z >= self._table_distance):
-            curr_z -= 0.01
+            curr_z -= 0.05
             curr_pose.position.z = curr_z
 
             joint_angles = self.ik_request(curr_pose)
