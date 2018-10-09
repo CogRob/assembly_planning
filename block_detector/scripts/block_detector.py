@@ -17,12 +17,12 @@ TUNE_HSV_VALS = False
 
 class BlockDetector():
     def __init__(self, resolution, allowed_circle_center,
-                 allowed_circle_diameter,
-                 allowed_circle_thickness, pub_rate):
+                 allowed_circle_diameter, allowed_circle_thickness, pub_rate):
         self.image_width = resolution[0]
         self.image_height = resolution[1]
 
-        self.image_center = (int(self.image_width/2), int(self.image_height/2))
+        self.image_center = (int(self.image_width / 2),
+                             int(self.image_height / 2))
 
         self.allowed_circle_center = allowed_circle_center
         self.allowed_circle_diameter = allowed_circle_diameter
@@ -60,8 +60,8 @@ class BlockDetector():
 
         # The image with detected blocks surrounded by bounding boxes and
         # labeled with their dimensions
-        self.bounded_image = np.zeros((self.image_height, self.image_width, 3),
-                                      dtype=np.uint8)
+        self.bounded_image = np.zeros(
+            (self.image_height, self.image_width, 3), dtype=np.uint8)
 
         self.opencv3 = str.startswith(cv2.__version__, '3')
 
@@ -108,21 +108,21 @@ class BlockDetector():
             queue_size=10)
 
     def publish_debugging(self):
-        self.red_seg_image_pub.publish(self.cv_bridge.cv2_to_imgmsg(
-            self.hsv_thresh_images["red"]))
-        self.green_seg_image_pub.publish(self.cv_bridge.cv2_to_imgmsg(
-            self.hsv_thresh_images["green"]))
-        self.blue_seg_image_pub.publish(self.cv_bridge.cv2_to_imgmsg(
-            self.hsv_thresh_images["blue"]))
-        self.bounded_image_pub.publish(self.cv_bridge.cv2_to_imgmsg(
-            self.bounded_image))
+        self.red_seg_image_pub.publish(
+            self.cv_bridge.cv2_to_imgmsg(self.hsv_thresh_images["red"]))
+        self.green_seg_image_pub.publish(
+            self.cv_bridge.cv2_to_imgmsg(self.hsv_thresh_images["green"]))
+        self.blue_seg_image_pub.publish(
+            self.cv_bridge.cv2_to_imgmsg(self.hsv_thresh_images["blue"]))
+        self.bounded_image_pub.publish(
+            self.cv_bridge.cv2_to_imgmsg(self.bounded_image))
 
     def publish_markers(self):
         self.marker_pub.publish(self.block_markers)
 
     def cam_callback(self, data):
         self.curr_image = self.cv_bridge.imgmsg_to_cv2(data, "bgr8")
-        if(TUNE_HSV_VALS):
+        if (TUNE_HSV_VALS):
             self.find_hsv_values()
         self.detected_blocks = self.detect_blocks()
         self.bounded_image = self.draw_detected_blocks()
@@ -178,14 +178,14 @@ class BlockDetector():
                 contour_center = (int(min_area_rect[0][0]),
                                   int(min_area_rect[0][1]))
 
-                distance_to_center = distance(
-                    contour_center, self.allowed_circle_center)
+                distance_to_center = distance(contour_center,
+                                              self.allowed_circle_center)
 
                 # Check that contour area is within thresholds
                 if (contour_area > self.blob_area_min_thresh
-                        and contour_area < self.blob_area_max_thresh and
-                        distance_to_center < self.allowed_circle_diameter):
-                                # Write the ratio
+                        and contour_area < self.blob_area_max_thresh
+                        and distance_to_center < self.allowed_circle_diameter):
+                    # Write the ratio
 
                     if (min_area_rect[1][0] > min_area_rect[1][1]):
                         block_length_pix = round(min_area_rect[1][0], 0)
@@ -198,30 +198,30 @@ class BlockDetector():
                         block_length_pix, block_width_pix)
 
                     # get_block_type found a non-block
-                    if(block_length is None):
+                    if (block_length is None):
                         continue
 
                     # Calculate the block angle
                     # Adding 90 because the resultant angle from min_area_rect
                     # is always [-90, 0] so we can shift it's range to
                     # [0, 90] and then convert from degrees to radians
-                    if(min_area_rect[1][0] < min_area_rect[1][1]):
+                    if (min_area_rect[1][0] < min_area_rect[1][1]):
                         block_angle = math.radians(min_area_rect[2] + 180)
                     else:
                         block_angle = math.radians(min_area_rect[2] + 90)
 
-                    detected_blocks.append(
-                        {"color": color,
-                         "min_area_rect": min_area_rect,
-                         "block_center": contour_center,
-                         "block_length": block_length,
-                         "block_width": block_width,
-                         "block_angle": block_angle
-                         })
+                    detected_blocks.append({
+                        "color": color,
+                        "min_area_rect": min_area_rect,
+                        "block_center": contour_center,
+                        "block_length": block_length,
+                        "block_width": block_width,
+                        "block_angle": block_angle
+                    })
 
                 else:
                     """
-                    rospy.loginfo(
+                    rospy.logdebug(
                         "Contour area was too small, probably not a block.")
                     """
                     pass
@@ -233,10 +233,10 @@ class BlockDetector():
         # Draw black area surrounding table for top camera or
         # for field of view that has significant distortion for
         # hand camera
-        cv2.circle(image, self.allowed_circle_center,
-                   self.allowed_circle_diameter +
-                   self.allowed_circle_thickness/2, (0, 0, 0),
-                   self.allowed_circle_thickness)
+        cv2.circle(
+            image, self.allowed_circle_center,
+            self.allowed_circle_diameter + self.allowed_circle_thickness / 2,
+            (0, 0, 0), self.allowed_circle_thickness)
 
         for detected_block in self.detected_blocks:
             # Extract variables from detected block dictionary
@@ -247,51 +247,52 @@ class BlockDetector():
             block_color = detected_block["color"]
 
             if (self.opencv3):
-                bounding_box = np.int0(cv2.boxPoints(
-                    detected_block["min_area_rect"]))
+                bounding_box = np.int0(
+                    cv2.boxPoints(detected_block["min_area_rect"]))
             else:
-                bounding_box = np.int0(cv2.cv.BoxPoints(
-                    detected_block["min_area_rect"]))
+                bounding_box = np.int0(
+                    cv2.cv.BoxPoints(detected_block["min_area_rect"]))
 
             # Draw bounding box
             cv2.drawContours(image, [bounding_box], 0,
                              self.hsv_dict[block_color]["color_val"], 2)
 
             # Draw center of bounding box
-            cv2.circle(image, detected_block["block_center"],
-                       3, self.hsv_dict[block_color]["color_val"], 1)
+            cv2.circle(image, detected_block["block_center"], 3,
+                       self.hsv_dict[block_color]["color_val"], 1)
 
             # Write the block dimensions
-            cv2.putText(image,
-                        str(block_width) + "x" +
-                        str(block_length),
-                        # For printing angle on image uncomment:
-                        # + " A: " +
-                        # str(math.degrees(
-                        #    round(block_angle, 2))),
-                        block_center,
-                        self.font, self.font_size,
-                        self.hsv_dict[block_color]["color_val"],
-                        int(self.font_thickness))
+            cv2.putText(
+                image,
+                str(block_width) + "x" + str(block_length),
+                # For printing angle on image uncomment:
+                # + " A: " +
+                # str(math.degrees(
+                #    round(block_angle, 2))),
+                block_center,
+                self.font,
+                self.font_size,
+                self.hsv_dict[block_color]["color_val"],
+                int(self.font_thickness))
 
         return image
 
     def get_block_type(self, block_length, block_width):
         pass
-        if(block_length < self.one_unit_max):
+        if (block_length < self.one_unit_max):
             length = 1
-        elif(block_length < self.two_unit_max):
+        elif (block_length < self.two_unit_max):
             length = 2
-        elif(block_length < self.three_unit_max):
+        elif (block_length < self.three_unit_max):
             length = 3
-        elif(block_length < self.four_unit_max):
+        elif (block_length < self.four_unit_max):
             length = 4
         else:
             length = None
 
-        if(block_width < self.one_unit_max):
+        if (block_width < self.one_unit_max):
             width = 1
-        elif(block_width < self.two_unit_max):
+        elif (block_width < self.two_unit_max):
             width = 2
         else:
             width = None
@@ -331,7 +332,7 @@ class BlockDetector():
         cv2.setTrackbarPos(vl, barsWindow, 0)
         cv2.setTrackbarPos(vh, barsWindow, 255)
 
-        while(True):
+        while (True):
             frame = self.curr_image
             frame = cv2.GaussianBlur(frame, (5, 5), 0)
 
@@ -415,33 +416,32 @@ def create_block_marker(frame, id, position, orientation, length, width,
 
     single_unit_dim = 0.03
 
-    curr_marker.scale.x = width*single_unit_dim
-    curr_marker.scale.y = length*single_unit_dim
+    curr_marker.scale.x = width * single_unit_dim
+    curr_marker.scale.y = length * single_unit_dim
     curr_marker.scale.z = 1.2 * single_unit_dim
 
-    if(block_color == "red"):
+    if (block_color == "red"):
         curr_marker.color.r = 1.0
         curr_marker.color.g = 0.0
         curr_marker.color.b = 0.0
-    elif(block_color == "blue"):
+    elif (block_color == "blue"):
         curr_marker.color.r = 0.0
         curr_marker.color.g = 0.0
         curr_marker.color.b = 1.0
-    elif(block_color == "green"):
+    elif (block_color == "green"):
         curr_marker.color.r = 0.0
         curr_marker.color.g = 1.0
         curr_marker.color.b = 0.0
-    elif(block_color == "yellow"):
+    elif (block_color == "yellow"):
         curr_marker.color.r = 1.0
         curr_marker.color.g = 1.0
         curr_marker.color.b = 0.0
-    elif(block_color == "teal"):
+    elif (block_color == "teal"):
         curr_marker.color.r = 0.0
         curr_marker.color.g = 0.2
         curr_marker.color.b = 1.0
     else:
-        rospy.logerr(
-            "Color %s doesn't have a supported marker.", block_color)
+        rospy.logerr("Color %s doesn't have a supported marker.", block_color)
 
     # Alpha value (transparency)
     curr_marker.color.a = transparency
@@ -450,14 +450,18 @@ def create_block_marker(frame, id, position, orientation, length, width,
 
     return curr_marker
 
+
 # From:
 # https://rosettacode.org/wiki/Find_the_intersection_of_a_line_with_a_plane
 
 
-def line_plane_intersection(plane_normal, plane_point, ray_direction,
-                            ray_point, epsilon=1e-6):
+def line_plane_intersection(plane_normal,
+                            plane_point,
+                            ray_direction,
+                            ray_point,
+                            epsilon=1e-6):
     n_dot_u = plane_normal.dot(ray_direction)
-    if(math.fabs(n_dot_u) < epsilon):
+    if (math.fabs(n_dot_u) < epsilon):
         return None
 
     w = ray_point - plane_point
