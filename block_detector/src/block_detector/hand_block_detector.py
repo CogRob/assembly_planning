@@ -16,8 +16,16 @@ from sensor_msgs.msg import Image, Range
 
 class HandBlockDetector(BlockDetector):
     def __init__(self, pub_rate, sim):
-        BlockDetector.__init__(self, resolution=(1280, 800),
-                               allowed_circle_center=(640, 400),
+        self.camera_topic = "/cameras/right_hand_camera/image"
+
+        img_msg = rospy.wait_for_message(self.camera_topic, Image)
+
+        self.res_w = img_msg.width
+        self.res_h = img_msg.height
+
+        BlockDetector.__init__(self, resolution=(self.res_w, self.res_h),
+                               allowed_circle_center=(
+                                   self.res_w/2, self.res_h/2),
                                allowed_circle_diameter=450,
                                allowed_circle_thickness=255,
                                pub_rate=pub_rate)
