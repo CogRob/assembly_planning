@@ -1,4 +1,8 @@
 #!/usr/bin/env python
+"""
+Script to programatically:
+    1. Insert and delete blocks models in Gazebo
+"""
 import logging
 from metareasoning_agent.knowledge_base import Block, EnvState
 import networkx as nx
