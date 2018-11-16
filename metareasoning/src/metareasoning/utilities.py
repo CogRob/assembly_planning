@@ -17,8 +17,8 @@ def calculate_pose_diff(pose1, pose2):
         delta_pose: type - geometry_msgs/Point
     """
     pose_diff = Pose2D()
-    pose_diff.x = math.fabs(pose1.x - pose2.x)
-    pose_diff.y = math.fabs(pose1.y - pose2.y)
-    pose_diff.theta = math.fabs(pose1.theta - pose2.theta)
+    pose_diff.x = pose1.x - pose2.x
+    pose_diff.y = pose1.y - pose2.y
+    pose_diff.theta = pose1.theta - pose2.theta
 
     return pose_diff

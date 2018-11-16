@@ -15,45 +15,6 @@ from metareasoning.knowledge_base import (
 from metareasoning.utilities import calculate_pose_diff
 
 
-# routine definitions: global so that both planner and learner can access them
-def acquireroutine(constraint):  # pylint: disable=no-self-use
-    """
-    Definition for the high-level method acquire
-
-    input
-    :block: of type knowledge_base.Block
-
-    returns
-    :action_plan: a list of tuples, where 1st element is the name of a
-    PrimitiveAction and 2nd is the related constraint
-    """
-    action_plan = []
-    action_plan.append((PrimitiveActions.transport, constraint))
-    action_plan.append((PrimitiveActions.align, constraint))
-    action_plan.append((PrimitiveActions.pick, Constraint()))
-    action_plan.append((PrimitiveActions.retract, Constraint()))
-    return action_plan
-
-
-def depositroutine(constraint):  # pylint: disable=no-self-use
-    """
-    Definition for the high-level method deposit
-
-    input
-    :block: of type knowledge_base.Block
-
-    returns
-    :action_plan: a list of tuples, where 1st element is the name of a
-    PrimitiveAction and 2nd is the related constraint
-    """
-    action_plan = []
-    action_plan.append((PrimitiveActions.transport, constraint))
-    action_plan.append((PrimitiveActions.align, constraint))
-    action_plan.append((PrimitiveActions.place, Constraint()))
-    action_plan.append((PrimitiveActions.retract, Constraint()))
-    return action_plan
-
-
 class DeltaPlanner(object):
     """
     Given change in state, returns a list of ordered actions and constraints.
@@ -115,6 +76,45 @@ class DeltaPlanner(object):
         action_plan = []
         for (method, constraint) in plan:
             action_plan.extend(self._method2action_db[method](constraint))
+        return action_plan
+
+
+# routine definitions
+
+    def acquireroutine(constraint):  # pylint: disable=no-self-use
+        """
+        Definition for the high-level method acquire
+
+        input
+        :block: of type knowledge_base.Block
+
+        returns
+        :action_plan: a list of tuples, where 1st element is the name of a
+        PrimitiveAction and 2nd is the related constraint
+        """
+        action_plan = []
+        action_plan.append((PrimitiveActions.transport, constraint))
+        action_plan.append((PrimitiveActions.align, constraint))
+        action_plan.append((PrimitiveActions.pick, Constraint()))
+        action_plan.append((PrimitiveActions.retract, Constraint()))
+        return action_plan
+
+    def depositroutine(constraint):  # pylint: disable=no-self-use
+        """
+        Definition for the high-level method deposit
+
+        input
+        :block: of type knowledge_base.Block
+
+        returns
+        :action_plan: a list of tuples, where 1st element is the name of a
+        PrimitiveAction and 2nd is the related constraint
+        """
+        action_plan = []
+        action_plan.append((PrimitiveActions.transport, constraint))
+        action_plan.append((PrimitiveActions.align, constraint))
+        action_plan.append((PrimitiveActions.place, Constraint()))
+        action_plan.append((PrimitiveActions.retract, Constraint()))
         return action_plan
 
     def plan(self, curr_state, next_state):
