@@ -19,9 +19,17 @@ from metareasoning.agent import Agent
 from metareasoning.baxter_scripts import JointRecorder
 from block_detector.msg import BlockObservationArray
 
+from std_msgs.msg import (
+    Header,
+    Empty,
+)
 from baxter_interface import (
     DigitalIO,
     Navigator,
+)
+from gazebo_msgs.srv import (
+    SpawnModel,
+    DeleteModel,
 )
 
 
@@ -48,11 +56,12 @@ class RecordAndExecute(object):
         # control input and output
         self._agent = Agent(arm)
         self._agent.subscribe()
-        self._nav = Navigator('%s' % (arm, ))
+        self._arm_nav = Navigator('%s' % (arm, ))
+        self._torso_nav = Navigator('torso_%s' % (arm, ))
         self._planner = DeltaPlanner()
         self._teach_button = DigitalIO('%s_upper_button' % (arm, ))  # dash
-        # record right arm, ignore gripper states, save to 'trajectory' file
-        # at 10 Hz
+        # record right arm, record in end-effector space, save to 'trajectory'
+        # file at 10 Hz
         self._recorder = JointRecorder(
             arm='right', mode='end', filename='trajectory', rate=10)
 
@@ -104,18 +113,18 @@ class RecordAndExecute(object):
 
     def _switch_mode_lights(self):
         if self._mode == RobotModes.learn:
-            self._nav.inner_led = True
-            self._nav.outer_led = False
+            self._arm_nav.inner_led = True
+            self._arm_nav.outer_led = False
         elif self._mode == RobotModes.execute:
-            self._nav.inner_led = False
-            self._nav.outer_led = True
+            self._arm_nav.inner_led = False
+            self._arm_nav.outer_led = True
         elif self._mode == RobotModes.teach:
-            self._nav.inner_led = True
-            self._nav.outer_led = True
+            self._arm_nav.inner_led = True
+            self._arm_nav.outer_led = True
 
     def next_cycle(self):
         # manage mode change
-        if self._nav.button2 == 1:
+        if self._arm_nav.button2 == 1:
             if self._mode == RobotModes.learn:
                 self._mode = RobotModes.execute
             else:
@@ -125,7 +134,7 @@ class RecordAndExecute(object):
             rospy.sleep(1.0)
         # manage learn mode
         if self._mode == RobotModes.learn:
-            if self._nav.button0 == 1:
+            if self._arm_nav.button0 == 1:
                 self._task_loaded = True
                 rospy.loginfo("capture state")
                 self.save_state()
@@ -153,12 +162,15 @@ class RecordAndExecute(object):
         if self._mode == RobotModes.teach:
             pass
         # manage end of rosnode
-        if self._nav.button1 == 1:
+        if self._arm_nav.button1 == 1:
             rospy.signal_shutdown("End of Demo")
+        # manage RENDER
+        if self._torso_nav.button0 == 1:
+            self._render()
 
     def exit(self):
-        self._nav.inner_led = False
-        self._nav.outer_led = False
+        self._arm_nav.inner_led = False
+        self._arm_nav.outer_led = False
 
     def get_state(self, data):
         # look at the message description and save: block_type, poses
