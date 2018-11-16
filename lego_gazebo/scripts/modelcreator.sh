@@ -12,22 +12,26 @@ function main_loop(){
   MTEMP=megabloks1x
   for num in 1 2 3
     do
-      for color in '' _red _blue _green _pink _yellow
+      for color in '' xred xblue xgreen xpink xyellow
         do
-          MNAME=${MTEMP}${num}${color}
-          cd $MNAME
-          create_sdf ${num} ${color}
-          cd ..
+          create_models ${MTEMP} ${num} ${color}
       done
   done
 
 }
 
 function create_models(){
-  MNAME=${MTEMP}${num}${color}
+  MNAME=$1$2$3
   mkdir -p $MNAME/meshes
   cd $MNAME
-  create_config ${num} ${color}
+  create_config $2 $3
+  create_sdf $2 $3
+  cd ..
+}
+
+function update_sdf(){
+  MNAME=${MTEMP}${num}${color}
+  cd $MNAME
   create_sdf ${num} ${color}
   cd ..
 }
@@ -84,8 +88,12 @@ function create_sdf(){
 	</surface>
       </collision>
       <inertial>
-      <mass value=\"$((0.003*$1))\"/>
-	<inertia ixx=\"0.00001\" iyy=\"0.00001\" izz=\"0.00001\" />
+        <mass>$((0.003*$1))</mass>
+	    <inertia>
+          <ixx>0.00001</ixx>
+          <iyy>0.00001</iyy>
+          <izz>0.00001</izz>
+        </inertia>
       </inertial>
       <visual name=\"visual\">
         <pose>0 0 -0.02 0 0 0</pose>

@@ -19,8 +19,12 @@
 	</surface>
       </collision>
       <inertial>
-      <mass value="0.0060000000000000001"/>
-	<inertia ixx="0.00001" iyy="0.00001" izz="0.00001" />
+        <mass>0.0060000000000000001</mass>
+	    <inertia>
+          <ixx>0.00001</ixx>
+          <iyy>0.00001</iyy>
+          <izz>0.00001</izz>
+        </inertia>
       </inertial>
       <visual name="visual">
         <pose>0 0 -0.02 0 0 0</pose>
